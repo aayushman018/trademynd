@@ -1,5 +1,15 @@
 {
   "version": 2,
+  "rewrites": [
+    {
+      "source": "/api/v1/:path*",
+      "destination": "/api/v1/:path*"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "/api/:path*"
+    }
+  ],
   "builds": [
     {
       "src": "frontend/package.json",
@@ -11,6 +21,10 @@
     }
   ],
   "routes": [
+    {
+      "src": "/api/v1/(.*)",
+      "dest": "backend/app/main.py"
+    },
     {
       "src": "/api/(.*)",
       "dest": "backend/app/main.py"
