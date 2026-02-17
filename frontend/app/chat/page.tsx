@@ -60,9 +60,9 @@ export default function ChatPage() {
     // Simulate status update
     setTimeout(() => {
       setMessages((prev) => 
-        prev.map(m => m.id === userMessage.id ? { ...m, status: 'delivered' } : m)
-      );
-    }, 1000);
+          prev.map(m => m.id === userMessage.id ? { ...m, status: 'delivered' } as Message : m)
+        );
+      }, 1000);
 
     try {
       const response = await api.post('/chat/send', { message: userMessage.content });
@@ -77,9 +77,10 @@ export default function ChatPage() {
           status: 'read'
         };
 
-        setMessages((prev) => 
-          prev.map(m => m.id === userMessage.id ? { ...m, status: 'read' } : m).concat(botMessage)
-        );
+        setMessages((prev) => {
+          const updatedMessages = prev.map(m => m.id === userMessage.id ? { ...m, status: 'read' } as Message : m);
+          return updatedMessages.concat(botMessage);
+        });
         setIsTyping(false);
       }, 1500);
 
