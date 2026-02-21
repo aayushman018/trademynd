@@ -113,6 +113,55 @@ OCR:
             "ocr_text": ocr_text[:2000] if ocr_text else None,
         }
 
+    async def generate_personality_response(self, trade_data: dict, user_message: str) -> str:
+        """
+        Generate a friendly, supportive, and motivational response based on the trade result.
+        """
+        system_prompt = (
+            "You are a friendly, supportive, and motivational trading companion bot named 'TradeMynd'. "
+            "Your goal is to encourage the trader, celebrate their wins, and offer constructive empathy for losses. "
+            "Be concise, professional but warm. Use emojis. "
+            "If the trade is a WIN, celebrate it. If it's a LOSS, remind them of risk management or psychology. "
+            "If it's PENDING, encourage them to follow their plan. "
+            "Never give financial advice. Focus on execution and psychology."
+        )
+
+        user_prompt = f"""
+        User Message: "{user_message}"
+        Trade Details: {json.dumps(trade_data, default=str)}
+        
+        Generate a short response (max 2 sentences) acknowledging the trade log.
+        """
+
+        try:
+            # Try Sarvam first
+            if self.sarvam_client:
+                response = self.sarvam_client.chat.completions.create(
+                    model="sarvam-m",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                )
+                return response.choices[0].message.content or "Trade logged! Keep it up! 🚀"
+            
+            # Fallback to Gemini
+            if self.gemini_model:
+                response = self.gemini_model.generate_content(f"{system_prompt}\n\n{user_prompt}")
+                return response.text or "Trade logged! Good job following your plan. 📉📈"
+
+        except Exception as e:
+            print(f"AI Persona Generation Error: {e}")
+        
+        # Static Fallback
+        result = trade_data.get("result", "PENDING")
+        if result == "WIN":
+            return "Great trade! 🚀 Added to your journal."
+        elif result == "LOSS":
+            return "Logged. Review the setup and move on to the next one. 💪"
+        else:
+            return "Trade logged. Stick to your plan! 🛡️"
+
     async def analyze_voice(self, audio_data: Any) -> dict:
         """
         Stub for Whisper + GPT analysis.

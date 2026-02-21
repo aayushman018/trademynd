@@ -1,5 +1,6 @@
 import logging
 import re
+import json
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from uuid import UUID
@@ -86,14 +87,14 @@ class BotService:
 
     async def handle_start(self, chat_id: int):
         message = (
-            "Welcome to TradeJournal AI!\n\n"
-            "I can help you log your trades automatically via screenshots, voice notes, or text.\n\n"
-            "To get started, please link your account:\n"
+            "Welcome to TradeJournal AI! 🚀\n\n"
+            "I'm your trading companion. I can help you log your trades automatically via screenshots, voice notes, or text.\n\n"
+            "To get started, let's link your account:\n"
             f"1. Sign up at {settings.FRONTEND_URL}\n"
             "2. Open Connect Telegram in settings\n"
             "3. Generate your connect code\n"
             "4. Send `/connect TM-XXXXXX` here.\n\n"
-            f"Bot: @{settings.TELEGRAM_BOT_USERNAME}"
+            f"Let's crush the markets together! 💪\nBot: @{settings.TELEGRAM_BOT_USERNAME}"
         )
         return self.send_message(chat_id, message)
 
@@ -123,7 +124,7 @@ class BotService:
         if not user:
             return self.send_message(chat_id, "Account not found for this code. Generate a new one in dashboard.")
         if (user.plan or "free").strip().lower() == "free":
-            return self.send_message(chat_id, "Telegram bot logging is available on Pro and Elite plans.")
+            return self.send_message(chat_id, "Telegram bot logging is available on Pro and Elite plans. Upgrade to unlock! 🚀")
 
         existing_user = self.db.query(User).filter(
             User.telegram_chat_id == chat_id,
@@ -131,7 +132,7 @@ class BotService:
         ).first()
         if existing_user:
             if existing_user.id == user.id:
-                return self.send_message(chat_id, "You are already connected to this account.")
+                return self.send_message(chat_id, "You are already connected to this account. Ready to trade! 📈")
             return self.send_message(chat_id, "This chat is already linked to another account.")
 
         user.telegram_chat_id = chat_id
@@ -139,7 +140,7 @@ class BotService:
         self.db.add(user)
         self.db.commit()
 
-        return self.send_message(chat_id, f"Connected successfully to {user.name}. Send your trades now.")
+        return self.send_message(chat_id, f"Connected successfully to {user.name}. Send me your trades/screenshots and I'll log them for you! 📝")
 
     async def handle_news(self, chat_id: int):
         user = self.db.query(User).filter(
@@ -168,7 +169,7 @@ class BotService:
         if "photo" in message:
             return await self._handle_photo_message(chat_id, user, message)
         if "voice" in message:
-            return self.send_message(chat_id, "Voice note received. Processing...")
+            return self.send_message(chat_id, "Voice note received. I'm listening... 👂")
 
         text = (message.get("text") or "").strip()
         if not text:
@@ -181,39 +182,57 @@ class BotService:
 
         parsed_trade = self._parse_trade_text(text)
         if not parsed_trade:
-            return self.send_message(
-                chat_id,
-                "I could not parse that trade. Try: `Long BTC entry 99000 exit 100000 result win`.",
-            )
+            # Try to use AI to parse text if regex fails (fallback)
+            if self.ai_service:
+                parsed_trade = await self.ai_service.analyze_text(text)
+            
+            if not parsed_trade or parsed_trade.get("instrument") == "UNKNOWN":
+                return self.send_message(
+                    chat_id,
+                    "I couldn't quite catch that trade details. Try: `Long BTC entry 99000 exit 100000 result win`. 🤔",
+                )
+
+        # Validate trade
+        validation_error = self._validate_trade(parsed_trade)
+        if validation_error:
+             return self.send_message(chat_id, f"⚠️ Trade Validation Error: {validation_error}")
 
         try:
-            trade = self.trade_service.create_trade(
-                user.id,
-                TradeCreate(
-                    instrument=parsed_trade["instrument"],
-                    direction=parsed_trade["direction"],
-                    entry_price=parsed_trade["entry_price"],
-                    exit_price=parsed_trade["exit_price"],
-                    result=parsed_trade["result"],
-                    r_multiple=parsed_trade["r_multiple"],
-                    trade_timestamp=datetime.now(timezone.utc),
-                    input_type="text",
-                    raw_input_data={"source": "telegram", "text": text},
-                ),
+            trade_create = TradeCreate(
+                instrument=parsed_trade["instrument"],
+                direction=parsed_trade["direction"],
+                entry_price=parsed_trade["entry_price"],
+                exit_price=parsed_trade["exit_price"],
+                result=parsed_trade["result"],
+                r_multiple=parsed_trade["r_multiple"],
+                trade_timestamp=datetime.now(timezone.utc),
+                input_type="text",
+                raw_input_data={"source": "telegram", "text": text},
             )
+            
+            trade = self.trade_service.create_trade(user.id, trade_create)
+            
+            # Generate personality response
+            reply_text = "Trade logged."
+            if self.ai_service:
+                reply_text = await self.ai_service.generate_personality_response(
+                    {
+                        "instrument": trade.instrument,
+                        "direction": trade.direction,
+                        "result": trade.result,
+                        "entry": str(trade.entry_price),
+                        "exit": str(trade.exit_price)
+                    }, 
+                    text
+                )
+            
+            return self.send_message(chat_id, reply_text)
+
         except PlanLimitExceeded as exc:
             return self.send_message(chat_id, str(exc))
         except Exception:
             logger.exception("Failed to create trade from Telegram text for user_id=%s", user.id)
-            return self.send_message(chat_id, "I understood your message but could not save the trade. Try again.")
-
-        reply = (
-            f"Trade logged: {trade.direction or '-'} {trade.instrument}\n"
-            f"Entry: {trade.entry_price if trade.entry_price is not None else '-'} | "
-            f"Exit: {trade.exit_price if trade.exit_price is not None else '-'}\n"
-            f"Result: {trade.result or 'PENDING'}"
-        )
-        return self.send_message(chat_id, reply)
+            return self.send_message(chat_id, "I understood your message but hit a snag saving it. Please try again! 🔄")
 
     async def _handle_photo_message(self, chat_id: int, user: User, message: dict):
         caption = (message.get("caption") or "").strip()
@@ -234,12 +253,15 @@ class BotService:
         vision_trade = None
         if self.ai_service and file_id:
             try:
+                self.send_message(chat_id, "Analyzing screenshot... 🕵️‍♂️")
                 image_bytes = await download_telegram_file(file_id)
                 vision_trade = await self.ai_service.analyze_screenshot(image_bytes, caption=caption or None)
             except TelegramDeliveryError as exc:
                 logger.info("Telegram photo download unavailable: %s", exc)
+                return self.send_message(chat_id, "Couldn't download the image from Telegram. Please try again.")
             except Exception:
                 logger.exception("Screenshot analysis failed for user_id=%s", user.id)
+                return self.send_message(chat_id, "AI analysis failed. Please try again.")
 
         if vision_trade and (not parsed_trade or parsed_trade.get("instrument") == "SCREENSHOT"):
             instrument = vision_trade.get("instrument") or instrument
@@ -254,6 +276,20 @@ class BotService:
 
             if caption and vision_trade.get("notes") is None:
                 vision_trade["notes"] = caption
+        
+        # Validation
+        trade_data = {
+            "instrument": instrument,
+            "direction": direction,
+            "entry_price": entry_price,
+            "exit_price": exit_price,
+            "result": result,
+            "r_multiple": r_multiple
+        }
+        
+        # If instrument is unknown after vision, we can't save effectively without more info
+        if instrument == "UNKNOWN" or instrument == "SCREENSHOT":
+             return self.send_message(chat_id, "I couldn't identify the instrument from the screenshot. Please add a caption like `Long XAUUSD`.")
 
         try:
             trade = self.trade_service.create_trade(
@@ -276,25 +312,28 @@ class BotService:
                     },
                 ),
             )
+            
+            # Generate personality response
+            reply_text = "Screenshot logged."
+            if self.ai_service:
+                reply_text = await self.ai_service.generate_personality_response(
+                    {
+                        "instrument": trade.instrument,
+                        "direction": trade.direction,
+                        "result": trade.result,
+                        "entry": str(trade.entry_price),
+                        "exit": str(trade.exit_price)
+                    }, 
+                    caption or "Screenshot Trade"
+                )
+            
+            return self.send_message(chat_id, reply_text)
+            
         except PlanLimitExceeded as exc:
             return self.send_message(chat_id, str(exc))
         except Exception:
             logger.exception("Failed to create trade from Telegram screenshot for user_id=%s", user.id)
             return self.send_message(chat_id, "Screenshot received, but I could not save it. Please try again.")
-
-        if parsed_trade or (vision_trade and (vision_trade.get("confidence") or 0) >= 0.45):
-            reply = (
-                f"Screenshot logged: {trade.direction or '-'} {trade.instrument}\n"
-                f"Entry: {trade.entry_price if trade.entry_price is not None else '-'} | "
-                f"Exit: {trade.exit_price if trade.exit_price is not None else '-'}\n"
-                f"Result: {trade.result or 'PENDING'}"
-            )
-            return self.send_message(chat_id, reply)
-
-        return self.send_message(
-            chat_id,
-            "Screenshot logged to your dashboard as PENDING. Add a caption like `Long XAUUSD entry 4890 exit 4950` for auto extraction.",
-        )
 
     def _parse_trade_text(self, text: str) -> dict | None:
         upper_text = text.upper()
@@ -374,6 +413,34 @@ class BotService:
             return "BREAK_EVEN"
 
         return "PENDING"
+        
+    def _validate_trade(self, trade: dict) -> str | None:
+        """
+        Validate trade data for logical consistency.
+        Returns an error message string if invalid, None if valid.
+        """
+        if not trade.get("instrument"):
+            return "Instrument is missing."
+            
+        entry = trade.get("entry_price")
+        exit_price = trade.get("exit_price")
+        direction = trade.get("direction")
+        
+        if entry is not None and entry < 0:
+            return "Entry price cannot be negative."
+        if exit_price is not None and exit_price < 0:
+            return "Exit price cannot be negative."
+            
+        if direction and direction not in ["LONG", "SHORT"]:
+            return "Direction must be LONG or SHORT."
+            
+        if direction and entry and exit_price:
+            if direction == "LONG" and exit_price > entry and trade.get("result") == "LOSS":
+                 return "Logic Error: Long trade with Exit > Entry should be a WIN."
+            if direction == "SHORT" and exit_price < entry and trade.get("result") == "LOSS":
+                 return "Logic Error: Short trade with Exit < Entry should be a WIN."
+                 
+        return None
 
     def send_message(self, chat_id: int, text: str, parse_mode: str | None = None):
         logger.info("Telegram reply prepared for chat_id=%s", chat_id)
