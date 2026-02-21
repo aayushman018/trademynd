@@ -527,9 +527,7 @@ export default function HomePage() {
         </nav>
       </header>
 
-      <div className="fixed bottom-6 right-6 z-50 rounded-full border border-[#2A2A2A] bg-[#0C0C0C]/80 px-4 py-2 text-xs font-medium text-[#888888] backdrop-blur-md shadow-lg">
-        Proudly powered by <span className="text-[#C9A84C]">SARVAM AI</span>
-      </div>
+
 
       <main className="relative z-10">
         <section
