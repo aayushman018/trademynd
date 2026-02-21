@@ -199,6 +199,10 @@ class AIService:
             entry_price (number), exit_price (number), result (WIN/LOSS/PENDING/BREAK_EVEN).
             If a value is missing, use null or 0.0.
             
+            IMPORTANT: Do not treat verbs like "TOOK", "MADE", "GOT", "HAVE" as instruments.
+            If the text says "Took a profit of 200", the instrument is likely missing or implied from context.
+            If no valid financial instrument (like BTC, ETH, XAUUSD, EURUSD, NIFTY) is found, return "UNKNOWN" for instrument.
+            
             Text: "{text}"
             
             JSON:
