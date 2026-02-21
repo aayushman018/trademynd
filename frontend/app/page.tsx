@@ -199,57 +199,65 @@ const TelegramAnimation = () => {
                   </motion.div>
                 )}
 
-                {/* Step 3: Bot Card */}
+                {/* Step 3: Bot Card - Progressive Disclosure */}
                 {step >= 3 && (
                   <motion.div
                     initial={{ opacity: 0, y: 20, scale: 0.95 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     className="flex justify-start"
                   >
-                    <div className="w-full max-w-[90%] overflow-hidden rounded-2xl rounded-tl-sm border border-[#C9A84C]/30 bg-[#1C1C1C]">
-                      <div className="border-b border-[#2A2A2A] bg-[#C9A84C]/5 px-3 py-2">
-                        <p className="flex items-center gap-2 text-xs font-semibold text-[#C9A84C]">
-                          <Zap className="h-3 w-3" /> TRADE EXTRACTED
-                        </p>
+                    <div className="w-full max-w-[95%] overflow-hidden rounded-xl border border-[#C9A84C]/30 bg-[#1C1C1C] shadow-lg">
+                      {/* Card Header */}
+                      <div className="flex items-center justify-between border-b border-[#2A2A2A] bg-[#C9A84C]/5 px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <Zap className="h-3.5 w-3.5 text-[#C9A84C]" />
+                          <span className="text-sm font-semibold text-[#F0F0F0]">XAUUSD</span>
+                          <span className="rounded bg-[#4CAF7A]/10 px-1.5 py-0.5 text-[10px] font-bold text-[#4CAF7A]">LONG</span>
+                        </div>
+                        <span className="text-[10px] text-[#888888]">Just now</span>
                       </div>
-                      <div className="p-3 space-y-2 text-xs">
-                        {[
-                          { label: 'Instrument', value: 'XAUUSD', color: '#F0F0F0', font: 'font-mono font-medium' },
-                          { label: 'Direction', value: 'LONG ↑', color: '#4CAF7A', font: 'font-bold' },
-                          { label: 'Entry', value: '2,340.00', color: '#F0F0F0', font: 'font-mono' },
-                          { label: 'Stop Loss', value: '2,330.00', color: '#C0504A', font: 'font-mono' },
-                          { label: 'Target', value: '2,365.00', color: '#4CAF7A', font: 'font-mono' },
-                        ].map((row, i) => (
-                          <motion.div
-                            key={row.label}
-                            initial={{ opacity: 0, x: -10 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: 0.15 * i }}
-                            className="flex justify-between border-b border-[#2A2A2A] pb-1.5"
-                          >
-                            <span className="text-[#888888]">{row.label}</span>
-                            <span className={`${row.font} text-[${row.color}]`} style={{ color: row.color }}>{row.value}</span>
-                          </motion.div>
-                        ))}
-                        <motion.div
-                          initial={{ opacity: 0, x: -10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: 0.75 }}
-                          className="flex justify-between pt-1"
-                        >
-                          <span className="text-[#888888]">R:R</span>
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono text-[#E8C97A]">1:2.5</span>
-                            <motion.span
-                              initial={{ scale: 0 }}
-                              animate={{ scale: 1 }}
-                              transition={{ type: 'spring', delay: 0.9 }}
-                              className="flex h-4 w-4 items-center justify-center rounded-full bg-[#C9A84C] text-[10px] text-black"
-                            >
-                              ✓
-                            </motion.span>
-                          </div>
-                        </motion.div>
+                      
+                      {/* Primary Metrics */}
+                      <div className="grid grid-cols-3 gap-2 p-4 pb-2">
+                         <div>
+                            <p className="text-[10px] text-[#888888]">Entry</p>
+                            <p className="font-mono text-sm text-[#F0F0F0]">2340.0</p>
+                         </div>
+                         <div>
+                            <p className="text-[10px] text-[#888888]">Stop</p>
+                            <p className="font-mono text-sm text-[#C0504A]">2330.0</p>
+                         </div>
+                         <div>
+                            <p className="text-[10px] text-[#888888]">Target</p>
+                            <p className="font-mono text-sm text-[#4CAF7A]">2365.0</p>
+                         </div>
+                      </div>
+
+                      {/* Expanded Details (Simulated Progressive Disclosure) */}
+                      <motion.div 
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        transition={{ delay: 1.5, duration: 0.5 }}
+                        className="overflow-hidden bg-[#141414]/50 px-4"
+                      >
+                         <div className="border-t border-[#2A2A2A] py-3 space-y-2">
+                            <div className="flex justify-between text-xs">
+                               <span className="text-[#888888]">Risk/Reward</span>
+                               <span className="font-mono text-[#E8C97A]">1:2.5</span>
+                            </div>
+                            <div className="flex justify-between text-xs">
+                               <span className="text-[#888888]">Position Size</span>
+                               <span className="font-mono text-[#F0F0F0]">1.0 Lot</span>
+                            </div>
+                         </div>
+                      </motion.div>
+                      
+                      {/* Footer Action */}
+                      <div className="border-t border-[#2A2A2A] px-4 py-2">
+                         <div className="flex items-center gap-2 text-[10px] text-[#4CAF7A]">
+                            <span className="flex h-3 w-3 items-center justify-center rounded-full bg-[#4CAF7A] text-black">✓</span>
+                            Logged to Journal
+                         </div>
                       </div>
                     </div>
                   </motion.div>
@@ -350,21 +358,7 @@ const TelegramAnimation = () => {
         )}
       </AnimatePresence>
 
-      {/* WhatsApp Card (Always present but subtle) */}
-      <div className="absolute -right-4 -bottom-4 z-0 h-24 w-64 rounded-xl border border-[#25D366]/20 bg-[#0C0C0C]/40 p-3 backdrop-blur-[2px] opacity-60 rotate-6 scale-90">
-         <div className="flex items-center gap-2 opacity-50 grayscale">
-            <div className="h-8 w-8 rounded-full bg-[#25D366]/20" />
-            <div className="space-y-1">
-              <div className="h-2 w-20 rounded bg-[#2A2A2A]" />
-              <div className="h-2 w-12 rounded bg-[#2A2A2A]" />
-            </div>
-         </div>
-         <div className="absolute inset-0 flex items-center justify-center">
-            <span className="rounded-full bg-[#0C0C0C]/80 px-3 py-1 text-[10px] font-medium text-[#888888] backdrop-blur-md border border-[#2A2A2A]">
-              WhatsApp — Coming Soon
-            </span>
-         </div>
-      </div>
+      {/* WhatsApp Card removed from absolute floating position */}
       
       <p className="absolute -bottom-10 left-0 right-0 text-center text-[10px] text-[#555555]">
         Log from wherever you trade. More integrations on the way.
@@ -489,7 +483,8 @@ export default function HomePage() {
                 Journal every trade without leaving <span className="text-[#C9A84C]">Telegram</span>.
               </h1>
               <p className="mt-6 max-w-lg text-lg leading-relaxed text-[#888888]">
-                AI extracts your trade data, tracks your edge, and delivers red folder news — before the market moves. In your language.
+                <span className="block mb-2 font-medium text-[#F0F0F0]">Stop losing money to hidden patterns.</span>
+                AI analyzes your psychology, execution, and risk in real-time—directly in your chat.
               </p>
 
               <div className="mt-8 flex flex-col gap-1">
@@ -501,20 +496,39 @@ export default function HomePage() {
                     ▶ Watch 60-second demo
                   </a>
                 </div>
+                <div className="mt-6 flex items-center gap-2 text-xs text-[#555555]">
+                   <span className="flex h-2 w-2 items-center justify-center rounded-full bg-[#25D366]/20">
+                     <span className="h-1 w-1 rounded-full bg-[#25D366] animate-pulse" />
+                   </span>
+                   WhatsApp integration coming soon
+                </div>
                 <p className="mt-4 text-xs italic text-[#555555]">
                   "Built by a trader who got tired of losing money without knowing why." — Founder, TradeMynd
                 </p>
               </div>
 
-              <div className="mt-10 border-t border-[#2A2A2A] pt-6 pb-2">
-                <p className="mb-3 text-[10px] uppercase tracking-widest text-[#555555]">Powered by <span className="text-[#C9A84C]">Sarvam AI</span> · Available In</p>
+              <div className="mt-10">
+                <p className="mb-4 text-xs font-medium uppercase tracking-widest text-[#555555]">
+                  <span className="text-[#C9A84C]">Multilingual</span> Intelligence
+                </p>
                 <div className="flex flex-wrap gap-2">
-                   {['English', 'हिंदी', 'தமிழ்', 'తెలుగు', 'मराठी', 'ਪੰਜਾਬੀ'].map(lang => (
-                     <span key={lang} className="rounded-md border border-[#2A2A2A] bg-[#141414] px-2.5 py-1 text-[11px] text-[#888888]">
-                       {lang}
-                     </span>
+                   {[
+                     { code: 'EN', label: 'English', flag: '🇬🇧' },
+                     { code: 'HI', label: 'हिंदी', flag: '🇮🇳' },
+                     { code: 'TA', label: 'தமிழ்', flag: '🇮🇳' },
+                     { code: 'TE', label: 'తెలుగు', flag: '🇮🇳' },
+                     { code: 'MR', label: 'मराठी', flag: '🇮🇳' },
+                     { code: 'PA', label: 'ਪੰਜਾਬੀ', flag: '🇮🇳' }
+                   ].map((lang) => (
+                     <button key={lang.code} className="group flex items-center gap-2 rounded-lg border border-[#2A2A2A] bg-[#141414] px-3 py-2 text-xs text-[#888888] transition-all hover:border-[#C9A84C]/50 hover:bg-[#1C1C1C] hover:text-[#F0F0F0]">
+                       <span className="opacity-60 grayscale group-hover:grayscale-0 group-hover:opacity-100">{lang.flag}</span>
+                       <span>{lang.label}</span>
+                     </button>
                    ))}
                 </div>
+                <p className="mt-3 text-[10px] text-[#555555]">
+                  Powered by <span className="text-[#C9A84C] font-semibold">Sarvam AI</span> for native voice & text understanding.
+                </p>
               </div>
             </motion.div>
 
@@ -530,7 +544,30 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section className="relative z-20 border-y border-[#2A2A2A] bg-[#0C0C0C]"><div className="ticker-fade mx-auto max-w-[1800px] overflow-hidden"><div className="ticker-track flex min-w-max items-center gap-6 py-3">{[...feed, ...feed, ...feed].map((t, i) => (<div key={`${t.instrument}-${i}`} className="flex items-center gap-2 rounded-full border border-[#2A2A2A] bg-[#141414]/90 px-4 py-1.5 text-xs"><span className="font-semibold">{t.instrument}</span><span className={t.direction === 'LONG' ? 'text-[#C9A84C]' : 'text-[#C0504A]'}>{t.direction}</span><span className="text-[#555555]">-</span><span className={t.result === 'WIN' ? 'text-[#4CAF7A]' : t.result === 'LOSS' ? 'text-[#C0504A]' : 'text-[#888888]'}>{t.r}</span><span className="rounded bg-[#1C1C1C]/80 px-1.5 py-0.5 text-[10px] text-[#555555]">{t.result}</span></div>))}</div></div></section>
+        <section className="relative z-20 border-y border-[#2A2A2A] bg-[#0C0C0C]">
+          <div className="mx-auto max-w-7xl px-6 py-8 lg:px-8">
+             <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+                <div>
+                   <h3 className="text-sm font-semibold text-[#F0F0F0]">Live Trade Feed</h3>
+                   <p className="text-xs text-[#888888]">Real-time execution from the community</p>
+                </div>
+                <div className="flex gap-3 overflow-x-auto pb-2 md:pb-0 no-scrollbar">
+                   {feed.slice(0, 4).map((t, i) => (
+                      <div key={i} className="flex min-w-[180px] flex-col rounded-lg border border-[#2A2A2A] bg-[#141414] p-3">
+                         <div className="flex items-center justify-between mb-2">
+                            <span className="font-mono text-xs font-medium text-[#F0F0F0]">{t.instrument}</span>
+                            <span className={`text-[10px] font-bold ${t.result === 'WIN' ? 'text-[#4CAF7A]' : t.result === 'LOSS' ? 'text-[#C0504A]' : 'text-[#888888]'}`}>{t.result}</span>
+                         </div>
+                         <div className="flex items-center justify-between text-[10px] text-[#888888]">
+                            <span className={t.direction === 'LONG' ? 'text-[#4CAF7A]' : 'text-[#C0504A]'}>{t.direction}</span>
+                            <span>{t.r}</span>
+                         </div>
+                      </div>
+                   ))}
+                </div>
+             </div>
+          </div>
+        </section>
 
         <section className="mx-auto max-w-7xl px-6 py-24 lg:px-8">
           <motion.div initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.3 }} transition={{ duration: 0.6 }} className="mb-12 text-center">
