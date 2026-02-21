@@ -22,12 +22,12 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const formData = new FormData();
-      formData.append('username', email);
-      formData.append('password', password);
-      
-      const response = await api.post('/login/access-token', formData, {
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      const form = new URLSearchParams();
+      form.append('username', email);
+      form.append('password', password);
+
+      const response = await api.post('/login/access-token', form, {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       });
       
       login(response.data.access_token);

@@ -31,12 +31,12 @@ export default function RegisterPage() {
       });
 
       // 2. Login automatically
-      const formData = new FormData();
-      formData.append('username', email);
-      formData.append('password', password);
-      
-      const loginResponse = await api.post('/login/access-token', formData, {
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      const form = new URLSearchParams();
+      form.append('username', email);
+      form.append('password', password);
+
+      const loginResponse = await api.post('/login/access-token', form, {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       });
       
       login(loginResponse.data.access_token);
