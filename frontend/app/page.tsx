@@ -617,6 +617,64 @@ export default function HomePage() {
         </section>
 
         <section className="mx-auto max-w-7xl px-6 py-24 lg:px-8">
+          <div className="mb-12 text-center">
+            <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#F0F0F0]">— Why Traders Stay —</p>
+          </div>
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }} 
+              whileInView={{ opacity: 1, y: 0 }} 
+              viewport={{ once: true }} 
+              transition={{ duration: 0.5 }}
+              className="group relative overflow-hidden rounded-2xl border border-[#2A2A2A] bg-[#141414]/40 p-8 transition-colors hover:border-[#C9A84C]/30 hover:bg-[#141414]/60"
+            >
+              <div className="mb-6 text-4xl">🧠</div>
+              <h3 className="mb-3 text-xl font-semibold text-[#F0F0F0]">Know Your Edge</h3>
+              <p className="mb-8 text-sm leading-relaxed text-[#888888]">
+                Stop guessing. R-multiple tracking shows exactly which setups print and which leak.
+              </p>
+              <p className="text-3xl font-bold text-[#4CAF7A]">+1.8R avg</p>
+            </motion.div>
+
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }} 
+              whileInView={{ opacity: 1, y: 0 }} 
+              viewport={{ once: true }} 
+              transition={{ duration: 0.5, delay: 0.1 }}
+              className="group relative overflow-hidden rounded-2xl border border-[#2A2A2A] bg-[#141414]/40 p-8 transition-colors hover:border-[#C9A84C]/30 hover:bg-[#141414]/60"
+            >
+              <div className="mb-6 text-4xl">😮‍💨</div>
+              <h3 className="mb-3 text-xl font-semibold text-[#F0F0F0]">Break Revenge Cycles</h3>
+              <p className="mb-8 text-sm leading-relaxed text-[#888888]">
+                Emotion tagging maps your mental state to execution quality. See exactly when you go tilt.
+              </p>
+              <div className="text-3xl font-bold text-[#4CAF7A]">
+                -67%<br/>
+                <span className="text-lg font-medium text-[#4CAF7A]/80">overtrading</span>
+              </div>
+            </motion.div>
+
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }} 
+              whileInView={{ opacity: 1, y: 0 }} 
+              viewport={{ once: true }} 
+              transition={{ duration: 0.5, delay: 0.2 }}
+              className="group relative overflow-hidden rounded-2xl border border-[#2A2A2A] bg-[#141414]/40 p-8 transition-colors hover:border-[#C9A84C]/30 hover:bg-[#141414]/60"
+            >
+              <div className="mb-6 text-4xl">⚡</div>
+              <h3 className="mb-3 text-xl font-semibold text-[#F0F0F0]">Zero Friction Journal</h3>
+              <p className="mb-8 text-sm leading-relaxed text-[#888888]">
+                Telegram is already open. Just forward your screenshot. No app switching, no forgetting.
+              </p>
+              <div className="text-3xl font-bold text-[#4CAF7A]">
+                5<br/>
+                <span className="text-lg font-medium text-[#4CAF7A]/80">sec/trade</span>
+              </div>
+            </motion.div>
+          </div>
+        </section>
+
+        <section className="mx-auto max-w-7xl px-6 py-24 lg:px-8">
           <motion.div initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.3 }} transition={{ duration: 0.6 }} className="mb-12 text-center">
             <p className="text-xs uppercase tracking-[0.24em] text-[#C9A84C]">Feature Stack</p>
             <h2 className="mt-4 text-balance text-3xl font-semibold tracking-tight sm:text-4xl">Built for serious iteration, not vanity dashboards</h2>
