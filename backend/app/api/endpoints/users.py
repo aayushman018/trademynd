@@ -1,14 +1,17 @@
 from typing import Any
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-import uuid
 import random
 import string
 
 from app.api import deps
 from app.core import security
 from app.models.user import User
-from app.schemas.user import UserCreate, User as UserSchema
+from app.schemas.user import TelegramTokenResponse, UserCreate, User as UserSchema
+from app.services.telegram_connect_service import (
+    TelegramTokenStoreError,
+    generate_connect_token,
+)
 
 router = APIRouter()
 
@@ -18,7 +21,7 @@ def generate_user_id():
     random_str = ''.join(random.choices(chars, k=5))
     return f"TRD-{random_str}"
 
-@router.post("/", response_model=UserSchema)
+@router.post("", response_model=UserSchema)
 def create_user(
     *,
     db: Session = Depends(deps.get_db_session),
@@ -59,3 +62,38 @@ def read_user_me(
     Get current user.
     """
     return current_user
+
+
+@router.get("/me/telegram-token", response_model=TelegramTokenResponse)
+def create_telegram_connect_token(
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """
+    Create a temporary Telegram connect token.
+    """
+    if (current_user.plan or "free").strip().lower() == "free":
+        raise HTTPException(
+            status_code=403,
+            detail="Telegram bot logging is available on Pro and Elite plans.",
+        )
+
+    try:
+        token = generate_connect_token(str(current_user.id))
+    except TelegramTokenStoreError as exc:
+        raise HTTPException(status_code=503, detail="Unable to create Telegram connect token") from exc
+    return TelegramTokenResponse(token=token)
+
+
+@router.post("/me/telegram-disconnect")
+def disconnect_telegram(
+    db: Session = Depends(deps.get_db_session),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """
+    Disconnect Telegram from the current account.
+    """
+    current_user.telegram_chat_id = None
+    current_user.telegram_connected = False
+    db.add(current_user)
+    db.commit()
+    return {"ok": True}

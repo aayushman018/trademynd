@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, DateTime, ForeignKey, BigInteger, Uuid
+from sqlalchemy import Boolean, Column, String, DateTime, ForeignKey, BigInteger, Uuid, false
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.core.database import Base
@@ -13,6 +13,8 @@ class User(Base):
     user_id = Column(String, unique=True, index=True, nullable=False)  # TRD-XXXXX
     name = Column(String, nullable=False)
     plan = Column(String, default="free")
+    telegram_chat_id = Column(BigInteger, unique=True, index=True, nullable=True)
+    telegram_connected = Column(Boolean, nullable=False, default=False, server_default=false())
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
 
@@ -30,6 +32,16 @@ class TelegramConnection(Base):
     connected_at = Column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User", back_populates="telegram_connection")
+
+
+class TelegramConnectToken(Base):
+    __tablename__ = "telegram_connect_tokens"
+
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    token = Column(String, unique=True, index=True, nullable=False)
+    user_id = Column(Uuid, ForeignKey("users.id"), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 class Subscription(Base):
     __tablename__ = "subscriptions"

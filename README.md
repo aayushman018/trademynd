@@ -54,8 +54,19 @@ An AI-first trading journal that eliminates manual logging through Telegram-firs
 ## Telegram Bot Setup
 
 1.  Create a bot with [@BotFather](https://t.me/BotFather).
-2.  Get the Token and add it to `.env`.
-3.  Set the webhook URL (requires a public URL, e.g., using ngrok for local dev):
+2.  Set these environment variables:
+    - `TELEGRAM_BOT_TOKEN`
+    - `TELEGRAM_BOT_USERNAME` (without `@`)
+    - `TELEGRAM_WEBHOOK_SECRET` (random string)
+    - `FRONTEND_URL` (e.g. `https://trademynd.vercel.app`)
+    - `NEXT_PUBLIC_TELEGRAM_BOT_USERNAME` (same as bot username)
+3.  Set the webhook URL (replace values with your real token/secret):
     ```bash
-    curl -F "url=https://your-public-url.ngrok.io/api/v1/bot/webhook" https://api.telegram.org/bot<YOUR_TOKEN>/setWebhook
+    curl -X POST "https://api.telegram.org/bot<YOUR_TOKEN>/setWebhook" \
+      -d "url=https://your-domain.com/api/v1/bot/webhook" \
+      -d "secret_token=<YOUR_WEBHOOK_SECRET>"
+    ```
+4.  Verify webhook configuration:
+    ```bash
+    curl "https://api.telegram.org/bot<YOUR_TOKEN>/getWebhookInfo"
     ```

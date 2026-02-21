@@ -18,12 +18,17 @@ class UserInDBBase(UserBase):
     id: Optional[UUID] = None
     user_id: Optional[str] = None
     plan: Optional[str] = "free"
+    telegram_connected: bool = False
+    telegram_chat_id: Optional[int] = None
 
     class Config:
         from_attributes = True
 
 class User(UserInDBBase):
     pass
+
+class TelegramTokenResponse(BaseModel):
+    token: str
 
 class UserInDB(UserInDBBase):
     hashed_password: str

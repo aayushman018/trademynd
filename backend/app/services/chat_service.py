@@ -1,15 +1,19 @@
 from sqlalchemy.orm import Session
-from app.services.ai_service import AIService
 from app.services.trade_service import TradeService
 from app.schemas.trade import TradeCreate
 from app.models.user import User
 from decimal import Decimal
-import json
 
 class ChatService:
     def __init__(self, db: Session):
         self.db = db
-        self.ai_service = AIService()
+        self.ai_service = None
+        try:
+            from app.services.ai_service import AIService
+            self.ai_service = AIService()
+        except Exception as exc:
+            # Keep chat endpoint available even if optional AI dependencies are missing.
+            print(f"AI service unavailable: {exc}")
         self.trade_service = TradeService(db)
 
     async def process_message(self, user: User, text: str) -> dict:
@@ -21,7 +25,10 @@ class ChatService:
         """
         
         # 1. Analyze
-        analysis = await self.ai_service.analyze_text(text)
+        if self.ai_service:
+            analysis = await self.ai_service.analyze_text(text)
+        else:
+            analysis = self._fallback_analyze_text(text)
         
         response_text = ""
         trade_data = None
@@ -69,4 +76,31 @@ class ChatService:
             "message": response_text,
             "data": analysis,
             "trade_id": str(trade_data.id) if trade_data else None
+        }
+
+    def _fallback_analyze_text(self, text: str) -> dict:
+        instrument = "UNKNOWN"
+        direction = "UNKNOWN"
+
+        upper_text = text.upper()
+        lower_text = text.lower()
+
+        if "BTC" in upper_text:
+            instrument = "BTCUSDT"
+        elif "ETH" in upper_text:
+            instrument = "ETHUSDT"
+
+        if "long" in lower_text or "buy" in lower_text:
+            direction = "LONG"
+        elif "short" in lower_text or "sell" in lower_text:
+            direction = "SHORT"
+
+        return {
+            "instrument": instrument,
+            "direction": direction,
+            "entry_price": 0.0,
+            "exit_price": 0.0,
+            "result": "PENDING",
+            "notes": text,
+            "confidence": 0.7,
         }

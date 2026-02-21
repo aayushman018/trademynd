@@ -4,6 +4,7 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
+from uuid import UUID
 
 from app.core import security
 from app.core.config import settings
@@ -30,7 +31,14 @@ def get_current_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Could not validate credentials",
         )
-    user = db.query(User).filter(User.id == token_data.sub).first()
+    try:
+        user_id = UUID(token_data.sub) if token_data.sub else None
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Could not validate credentials",
+        )
+    user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return user

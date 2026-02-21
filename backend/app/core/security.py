@@ -4,7 +4,9 @@ from jose import jwt
 from passlib.context import CryptContext
 from app.core.config import settings
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Prefer a built-in scheme to avoid native bcrypt backend issues on some runtimes.
+# Keep bcrypt for backward compatibility with previously stored hashes.
+pwd_context = CryptContext(schemes=["pbkdf2_sha256", "bcrypt"], deprecated="auto")
 
 def create_access_token(subject: Union[str, Any], expires_delta: timedelta = None) -> str:
     if expires_delta:

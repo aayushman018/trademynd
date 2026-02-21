@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap");
 @import "tailwindcss";
 
 @layer base {
@@ -94,5 +95,53 @@
 body {
   background-color: var(--color-background);
   color: var(--color-foreground);
+  font-family: "Google Sans", "Google Sans Text", "Segoe UI", sans-serif;
   font-feature-settings: "rlig" 1, "calt" 1;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes subtle-pulse-border {
+  0%,
+  100% {
+    border-color: #2a2a2a;
+  }
+  50% {
+    border-color: #3a3a3a;
+  }
+}
+
+@keyframes elite-shimmer {
+  0% {
+    background-position: -120% 0;
+  }
+  100% {
+    background-position: 220% 0;
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s ease;
+}
+
+.animate-subtle-pulse {
+  animation: subtle-pulse-border 1.4s ease-in-out infinite;
+}
+
+.elite-shimmer {
+  background-image: linear-gradient(
+    110deg,
+    rgba(201, 168, 76, 0.06) 20%,
+    rgba(232, 201, 122, 0.22) 45%,
+    rgba(201, 168, 76, 0.06) 70%
+  );
+  background-size: 220% 100%;
+  animation: elite-shimmer 2.4s linear infinite;
 }

@@ -9,6 +9,7 @@ import { api } from '@/lib/api';
 import { GoogleLogin } from '@react-oauth/google';
 
 export default function LoginPage() {
+  const isGoogleConfigured = Boolean(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID?.trim());
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -38,25 +39,30 @@ export default function LoginPage() {
   };
 
   const handleGoogleSuccess = async (credentialResponse: any) => {
+    if (!credentialResponse?.credential) {
+      setError('Google login failed');
+      return;
+    }
     try {
         const response = await api.post('/login/google', { token: credentialResponse.credential });
         login(response.data.access_token);
-    } catch (err) {
+    } catch (err: any) {
         console.error("Google Login Error:", err);
-        setError('Google login failed');
+        setError(err?.response?.data?.detail || 'Google login failed');
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background py-12 px-4 sm:px-6 lg:px-8 animate-in fade-in duration-500">
-      <div className="max-w-md w-full space-y-8 bg-card p-8 rounded-xl border border-border shadow-sm">
+    <div className="animate-in fade-in min-h-screen bg-[#0C0C0C] px-4 py-12 duration-500 sm:px-6 lg:px-8">
+      <div className="mx-auto w-full max-w-md space-y-8 rounded-lg border border-[#2A2A2A] bg-[#141414] p-8">
         <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-foreground tracking-tight">
-            Sign in to Ledgerly
+          <p className="text-center text-xs uppercase tracking-[0.16em] text-[#888888]">Trading Panel</p>
+          <h2 className="mt-3 text-center text-3xl font-semibold tracking-tight text-[#F0F0F0]">
+            Sign in to TradeMynd
           </h2>
-          <p className="mt-2 text-center text-sm text-muted-foreground">
+          <p className="mt-2 text-center text-sm text-[#888888]">
             Or{' '}
-            <Link href="/register" className="font-medium text-primary hover:text-primary/80 transition-colors">
+            <Link href="/register" className="font-medium text-[#C9A84C] transition-colors duration-200 hover:text-[#E8C97A]">
               start your 14-day free trial
             </Link>
           </p>
@@ -73,7 +79,7 @@ export default function LoginPage() {
               placeholder="Email address"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="bg-background"
+              className="h-11 border-[#2A2A2A] bg-[#0C0C0C] text-[#F0F0F0] placeholder:text-[#555555] focus-visible:ring-2 focus-visible:ring-[#C9A84C]/40"
             />
             <Input
               id="password"
@@ -84,18 +90,20 @@ export default function LoginPage() {
               placeholder="Password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="bg-background"
+              className="h-11 border-[#2A2A2A] bg-[#0C0C0C] text-[#F0F0F0] placeholder:text-[#555555] focus-visible:ring-2 focus-visible:ring-[#C9A84C]/40"
             />
           </div>
 
           {error && (
-            <div className="text-destructive text-sm text-center bg-destructive/10 p-2 rounded-md">{error}</div>
+            <div className="rounded-md border border-[#C0504A]/40 bg-[#C0504A]/10 p-2 text-center text-sm text-[#C0504A]">
+              {error}
+            </div>
           )}
 
           <div>
             <Button
               type="submit"
-              className="w-full h-11 text-base shadow-md hover:shadow-lg transition-all"
+              className="h-11 w-full bg-[#C9A84C] text-base font-semibold text-black shadow-none transition-colors duration-200 hover:bg-[#E8C97A]"
               isLoading={loading}
             >
               Sign in
@@ -103,13 +111,14 @@ export default function LoginPage() {
           </div>
         </form>
 
+        {isGoogleConfigured ? (
         <div className="mt-6">
             <div className="relative">
                 <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t border-border" />
+                    <span className="w-full border-t border-[#2A2A2A]" />
                 </div>
                 <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-card px-2 text-muted-foreground">Or continue with</span>
+                    <span className="bg-[#141414] px-2 text-[#555555]">Or continue with</span>
                 </div>
             </div>
             <div className="mt-6 flex justify-center">
@@ -123,6 +132,7 @@ export default function LoginPage() {
                 />
             </div>
         </div>
+        ) : null}
       </div>
     </div>
   );

@@ -1,34 +1,158 @@
-'use client';
+﻿'use client';
 
-import React, { useEffect, useState } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import { api } from '@/lib/api';
+import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { TrendingUp, Award, AlertCircle, ArrowUpRight, ArrowDownRight, MessageSquare, PieChart, Activity } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
+import { api } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
-interface Trade {
+type Trade = {
   id: string;
   instrument: string;
   direction: string;
+  entry_price: number | null;
+  exit_price: number | null;
   result: string;
-  r_multiple: number;
-  trade_timestamp: string;
+  r_multiple: number | null;
+  trade_timestamp: string | null;
+  emotion: string | null;
+};
+
+type NewsEvent = {
+  time_utc: string | null;
+  currency: string;
+  event: string;
+  forecast: string;
+  previous: string;
+};
+
+type NewsPayload = {
+  events: NewsEvent[];
+  scraper_healthy: boolean;
+  error: string | null;
+  from_cache: boolean;
+  last_fetched_utc: string | null;
+};
+
+const CURRENCY_EMOJI: Record<string, string> = {
+  USD: '\u{1F1FA}\u{1F1F8}',
+  EUR: '\u{1F1EA}\u{1F1FA}',
+  GBP: '\u{1F1EC}\u{1F1E7}',
+  JPY: '\u{1F1EF}\u{1F1F5}',
+  AUD: '\u{1F1E6}\u{1F1FA}',
+  NZD: '\u{1F1F3}\u{1F1FF}',
+  CAD: '\u{1F1E8}\u{1F1E6}',
+  CHF: '\u{1F1E8}\u{1F1ED}',
+  CNY: '\u{1F1E8}\u{1F1F3}',
+  CNH: '\u{1F1E8}\u{1F1F3}',
+  SEK: '\u{1F1F8}\u{1F1EA}',
+  NOK: '\u{1F1F3}\u{1F1F4}',
+  DKK: '\u{1F1E9}\u{1F1F0}',
+  SGD: '\u{1F1F8}\u{1F1EC}',
+  HKD: '\u{1F1ED}\u{1F1F0}',
+  XAU: '\u{1F947}',
+  XAG: '\u{1F948}',
+  BTC: '\u20BF',
+  ETH: '\u039E',
+};
+
+function formatDate(dateString: string | null): string {
+  if (!dateString) return '-';
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleDateString();
+}
+
+function formatPrice(value: number | null): string {
+  if (value === null || Number.isNaN(Number(value))) return '-';
+  return Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+}
+
+function formatR(value: number | null): string {
+  if (value === null || Number.isNaN(Number(value))) return '-';
+  const numeric = Number(value);
+  return `${numeric > 0 ? '+' : ''}${numeric.toFixed(2)}R`;
+}
+
+function formatUtcTime(value: string | null): string {
+  if (!value) return 'TBD';
+  return `${value} UTC`;
+}
+
+function formatLastFetched(value: string | null): string {
+  if (!value) return 'Not fetched yet';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return 'Not fetched yet';
+  return parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function currencyEmoji(value: string): string {
+  const normalized = (value || '').toUpperCase().replace('/', '');
+  if (CURRENCY_EMOJI[normalized]) return CURRENCY_EMOJI[normalized];
+
+  if (normalized.length === 6) {
+    const left = CURRENCY_EMOJI[normalized.slice(0, 3)] || '\u{1F4C8}';
+    const right = CURRENCY_EMOJI[normalized.slice(3)] || '\u{1F4B1}';
+    return `${left}${right}`;
+  }
+
+  return '\u{1F310}';
+}
+
+function toTimestamp(value: string | null): number {
+  if (!value) return 0;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 0;
+  return date.getTime();
+}
+
+function getCurrentStreak(trades: Trade[]): string {
+  if (trades.length === 0) return '0';
+  const sorted = [...trades].sort((a, b) => toTimestamp(b.trade_timestamp) - toTimestamp(a.trade_timestamp));
+
+  let currentType = '';
+  let count = 0;
+
+  for (const trade of sorted) {
+    if (trade.result !== 'WIN' && trade.result !== 'LOSS') {
+      continue;
+    }
+
+    if (!currentType) {
+      currentType = trade.result;
+      count = 1;
+      continue;
+    }
+
+    if (trade.result === currentType) {
+      count += 1;
+    } else {
+      break;
+    }
+  }
+
+  if (!currentType || count === 0) return '0';
+  return `${count}${currentType === 'WIN' ? 'W' : 'L'}`;
 }
 
 export default function DashboardPage() {
   const { user } = useAuth();
-  const [recentTrades, setRecentTrades] = useState<Trade[]>([]);
+  const [trades, setTrades] = useState<Trade[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [newsLoading, setNewsLoading] = useState(true);
+  const [newsPayload, setNewsPayload] = useState<NewsPayload | null>(null);
+  const [newsError, setNewsError] = useState<string | null>(null);
+  const [sendingNews, setSendingNews] = useState(false);
+  const [sendNewsFeedback, setSendNewsFeedback] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchTrades = async () => {
       try {
-        const response = await api.get('/trades?limit=5');
-        setRecentTrades(response.data);
-      } catch (error) {
-        console.error('Failed to fetch trades', error);
+        const response = await api.get('/trades?limit=500');
+        setTrades(response.data || []);
+      } catch {
+        setError('Failed to load dashboard data.');
       } finally {
         setLoading(false);
       }
@@ -37,202 +161,284 @@ export default function DashboardPage() {
     fetchTrades();
   }, []);
 
-  const winRate = recentTrades.length > 0
-    ? (recentTrades.filter(t => t.result === 'WIN').length / recentTrades.length) * 100
-    : 0;
+  useEffect(() => {
+    const fetchNews = async () => {
+      setNewsLoading(true);
+      setNewsError(null);
+      try {
+        const response = await api.get('/news/today');
+        setNewsPayload(response.data);
+      } catch {
+        setNewsError('News temporarily unavailable - Forex Factory may be blocking requests. Try again later.');
+      } finally {
+        setNewsLoading(false);
+      }
+    };
+
+    fetchNews();
+  }, []);
+
+  const sortedTrades = useMemo(
+    () => [...trades].sort((a, b) => toTimestamp(b.trade_timestamp) - toTimestamp(a.trade_timestamp)),
+    [trades]
+  );
+
+  const totalTrades = trades.length;
+  const winCount = trades.filter((trade) => trade.result === 'WIN').length;
+  const winRate = totalTrades ? (winCount / totalTrades) * 100 : 0;
+  const avgR =
+    trades.filter((trade) => trade.r_multiple !== null).reduce((sum, trade) => sum + Number(trade.r_multiple || 0), 0) /
+    Math.max(1, trades.filter((trade) => trade.r_multiple !== null).length);
+  const currentStreak = getCurrentStreak(trades);
+
+  const chartData = useMemo(() => {
+    const ascending = [...trades].sort((a, b) => toTimestamp(a.trade_timestamp) - toTimestamp(b.trade_timestamp));
+    let cumulative = 0;
+    return ascending.slice(-24).map((trade, index) => {
+      cumulative += Number(trade.r_multiple || 0);
+      const date = trade.trade_timestamp ? new Date(trade.trade_timestamp) : null;
+      return {
+        key: `${trade.id}-${index}`,
+        label: date ? date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : `T${index + 1}`,
+        cumulativeR: Number(cumulative.toFixed(2)),
+      };
+    });
+  }, [trades]);
+
+  const recentTrades = sortedTrades.slice(0, 8);
+  const telegramConnected = Boolean(user?.telegram_connected);
+
+  const handleSendNewsToTelegram = async () => {
+    if (!telegramConnected) return;
+    setSendingNews(true);
+    setSendNewsFeedback(null);
+    try {
+      await api.post('/news/send-to-telegram');
+      setSendNewsFeedback('Delivered to Telegram \u2713');
+    } catch {
+      setSendNewsFeedback('Failed to send news to Telegram.');
+    } finally {
+      setSendingNews(false);
+    }
+  };
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      <div className="flex justify-between items-center">
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Overview</h1>
-          <p className="text-muted-foreground mt-1 text-sm">Welcome back, {user?.name}</p>
+          <h1 className="text-2xl font-semibold tracking-tight text-[#F0F0F0]">Dashboard</h1>
+          <p className="mt-1 text-sm text-[#888888]">Account: {user?.name || 'Trader'}</p>
         </div>
-        <div className="flex gap-3">
-          <Link href="/journal">
-            <Button variant="outline" className="hidden sm:flex">
-              View Journal
-            </Button>
-          </Link>
-          <Link href="/connect-bot">
-            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm">
-              <MessageSquare className="w-4 h-4 mr-2" />
-              Connect Telegram
-            </Button>
-          </Link>
+        <Link
+          href="/dashboard/trades"
+          className="rounded-md border border-[#2A2A2A] bg-[#141414] px-4 py-2 text-sm font-medium text-[#F0F0F0] transition-colors duration-200 hover:border-[#3A3A3A]"
+        >
+          Open Trade History
+        </Link>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {[
+          { label: 'Total Trades', value: totalTrades.toLocaleString() },
+          { label: 'Win Rate', value: `${winRate.toFixed(1)}%` },
+          { label: 'Avg R-Multiple', value: `${avgR > 0 ? '+' : ''}${avgR.toFixed(2)}R` },
+          { label: 'Current Streak', value: currentStreak },
+        ].map((metric) => (
+          <div key={metric.label} className="rounded-lg border border-[#2A2A2A] bg-[#141414] p-5">
+            <p className="text-3xl font-semibold text-[#C9A84C]">{metric.value}</p>
+            <p className="mt-2 text-xs uppercase tracking-[0.1em] text-[#555555]">{metric.label}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="rounded-lg border border-[#2A2A2A] bg-[#141414] p-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs uppercase tracking-[0.1em] text-[#555555]">{'\u{1F4C5}'} Today&apos;s Red Folder News</p>
+          <div className="flex items-center gap-3">
+            <p className="text-xs text-[#555555]">Last fetched: {formatLastFetched(newsPayload?.last_fetched_utc || null)}</p>
+            <button
+              type="button"
+              onClick={handleSendNewsToTelegram}
+              disabled={!telegramConnected || sendingNews}
+              title={telegramConnected ? '' : 'Connect Telegram in Settings to enable delivery'}
+              className={[
+                'rounded-md border px-3 py-1.5 text-xs font-medium transition-colors duration-200',
+                telegramConnected
+                  ? 'border-[#C9A84C] text-[#C9A84C] hover:bg-[#1C1C1C]'
+                  : 'cursor-not-allowed border-[#2A2A2A] text-[#555555]',
+              ].join(' ')}
+            >
+              {sendingNews ? 'Sending...' : 'Send to Telegram'}
+            </button>
+          </div>
+        </div>
+
+        {newsLoading ? (
+          <p className="text-sm text-[#888888]">Fetching latest red folder events...</p>
+        ) : newsError ? (
+          <p className="text-sm text-[#555555]">
+            News temporarily unavailable - Forex Factory may be blocking requests. Try again later.
+          </p>
+        ) : newsPayload && !newsPayload.scraper_healthy && newsPayload.error ? (
+          <p className="text-sm text-[#555555]">{newsPayload.error}</p>
+        ) : newsPayload && newsPayload.events.length > 0 ? (
+          <div className="space-y-2">
+            {newsPayload.events.map((event, index) => (
+              <div
+                key={`${event.currency}-${event.event}-${index}`}
+                className="rounded-md border border-[#2A2A2A] bg-[#0C0C0C] px-3 py-2"
+              >
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="font-mono text-[#C9A84C]">{formatUtcTime(event.time_utc)}</span>
+                  <span className="rounded-full border border-[#2A2A2A] bg-[#1C1C1C] px-2 py-0.5 text-[#888888]">
+                    {currencyEmoji(event.currency)} {event.currency}
+                  </span>
+                </div>
+                <p className="mt-1 text-sm text-[#F0F0F0]">{event.event}</p>
+                <p className="mt-1 text-xs text-[#888888]">
+                  Forecast: {event.forecast || 'N/A'} | Previous: {event.previous || 'N/A'}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-[#555555]">
+            <span className="mr-2 inline-block h-2 w-2 rounded-full bg-[#4CAF7A]" />
+            No red folder events today. Safe to trade.
+          </p>
+        )}
+
+        {sendNewsFeedback ? (
+          <p className={`mt-3 text-sm ${sendNewsFeedback.includes('\u2713') ? 'text-[#4CAF7A]' : 'text-[#C0504A]'}`}>
+            {sendNewsFeedback}
+          </p>
+        ) : null}
+      </div>
+
+      <div className="rounded-lg border border-[#2A2A2A] bg-[#141414] p-5">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-base font-semibold text-[#F0F0F0]">R-Multiple Curve</h2>
+          <span className="text-xs uppercase tracking-[0.1em] text-[#555555]">Last {chartData.length} Trades</span>
+        </div>
+
+        <div className="h-[320px] w-full rounded-md border border-[#2A2A2A] bg-[#141414] p-3">
+          {loading ? (
+            <div className="flex h-full items-center justify-center text-sm text-[#888888]">Loading chart...</div>
+          ) : chartData.length === 0 ? (
+            <div className="flex h-full items-center justify-center text-sm text-[#888888]">
+              No chart data yet. Add trades to visualize performance.
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData}>
+                <CartesianGrid stroke="#2A2A2A" strokeDasharray="3 3" />
+                <XAxis dataKey="label" stroke="#555555" tick={{ fill: '#888888', fontSize: 11 }} />
+                <YAxis stroke="#555555" tick={{ fill: '#888888', fontSize: 11 }} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#141414',
+                    border: '1px solid #2A2A2A',
+                    borderRadius: 8,
+                    color: '#F0F0F0',
+                  }}
+                  labelStyle={{ color: '#F0F0F0' }}
+                />
+                <Line type="monotone" dataKey="cumulativeR" stroke="#C9A84C" strokeWidth={2.5} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="border-border/60 shadow-sm hover:shadow-md transition-all duration-300">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground mb-1">Total Trades</p>
-                <div className="flex items-baseline gap-2">
-                  <h3 className="text-3xl font-semibold text-foreground">{recentTrades.length}</h3>
-                  <span className="text-xs text-emerald-600 font-medium bg-emerald-50 dark:bg-emerald-900/30 px-1.5 py-0.5 rounded-full">+2 this week</span>
-                </div>
-              </div>
-              <div className="p-3 bg-primary/10 rounded-xl">
-                <Activity className="h-6 w-6 text-primary" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card className="border-border/60 shadow-sm hover:shadow-md transition-all duration-300">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground mb-1">Win Rate</p>
-                <div className="flex items-baseline gap-2">
-                  <h3 className="text-3xl font-semibold text-foreground">{winRate.toFixed(0)}%</h3>
-                  <span className="text-xs text-muted-foreground font-medium">Last 20 trades</span>
-                </div>
-              </div>
-              <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl">
-                <Award className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="overflow-hidden rounded-lg border border-[#2A2A2A]">
+        <div className="flex items-center justify-between border-b border-[#2A2A2A] bg-[#141414] px-4 py-3">
+          <h2 className="text-base font-semibold text-[#F0F0F0]">Recent Trades</h2>
+          <Link href="/dashboard/trades" className="text-sm text-[#888888] transition-colors duration-200 hover:text-[#F0F0F0]">
+            View all
+          </Link>
+        </div>
 
-        <Card className="border-border/60 shadow-sm hover:shadow-md transition-all duration-300">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground mb-1">Active Plan</p>
-                <div className="flex items-baseline gap-2">
-                  <h3 className="text-3xl font-semibold text-foreground capitalize">{user?.plan || 'Free'}</h3>
-                  <Link href="/settings" className="text-xs text-primary hover:underline font-medium">Manage</Link>
-                </div>
-              </div>
-              <div className="p-3 bg-violet-50 dark:bg-violet-900/20 rounded-xl">
-                <PieChart className="h-6 w-6 text-violet-600 dark:text-violet-400" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2">
-          <Card className="border-border/60 shadow-sm">
-            <CardHeader className="border-b border-border/40 bg-muted/20 px-6 py-4">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base font-semibold">Recent Activity</CardTitle>
-                <Link href="/trades" className="text-sm text-primary hover:text-primary/80 font-medium transition-colors">
-                  View all
-                </Link>
-              </div>
-            </CardHeader>
-            
-            {recentTrades.length === 0 ? (
-               <div className="px-6 py-16 text-center">
-                 <div className="mx-auto h-12 w-12 text-muted-foreground/30 mb-3 bg-muted/50 rounded-full flex items-center justify-center">
-                   <TrendingUp className="h-6 w-6" />
-                 </div>
-                 <h3 className="text-sm font-medium text-foreground">No trades yet</h3>
-                 <p className="mt-1 text-sm text-muted-foreground max-w-xs mx-auto">Connect the Telegram bot to start logging your trades automatically.</p>
-                 <Button variant="outline" size="sm" className="mt-4" asChild>
-                    <Link href="/connect-bot">Connect Bot</Link>
-                 </Button>
-               </div>
-            ) : (
-              <div className="divide-y divide-border/40">
-                {recentTrades.map((trade) => (
-                  <div key={trade.id} className="px-6 py-4 hover:bg-muted/30 transition-colors group">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center">
-                        <div className={`p-2.5 rounded-lg mr-4 ${
-                          trade.direction === 'LONG' 
-                            ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400' 
-                            : 'bg-rose-50 text-rose-600 dark:bg-rose-900/20 dark:text-rose-400'
-                        }`}>
-                          {trade.direction === 'LONG' ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-foreground">{trade.instrument}</p>
-                          <p className="text-xs text-muted-foreground">{new Date(trade.trade_timestamp).toLocaleDateString()}</p>
-                        </div>
-                      </div>
-                      
-                      <div className="text-right">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          trade.result === 'WIN' 
-                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' 
-                            : trade.result === 'LOSS'
-                            ? 'bg-rose-50 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400'
-                            : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400'
-                        }`}>
-                          {trade.result === 'WIN' ? '+' : trade.result === 'LOSS' ? '-' : ''}{Math.abs(trade.r_multiple)}R
-                        </span>
-                      </div>
-                    </div>
-                  </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full">
+            <thead className="bg-[#141414]">
+              <tr>
+                {['Date', 'Instrument', 'Direction', 'Entry', 'Exit', 'Result', 'R-Multiple', 'Emotion'].map((column) => (
+                  <th
+                    key={column}
+                    className="px-4 py-3 text-left text-xs font-medium uppercase tracking-[0.1em] text-[#555555]"
+                  >
+                    {column}
+                  </th>
                 ))}
-              </div>
-            )}
-          </Card>
-        </div>
-
-        <div className="lg:col-span-1">
-          <Card className="border-border/60 shadow-sm h-full">
-            <CardHeader className="border-b border-border/40 bg-muted/20 px-6 py-4">
-              <CardTitle className="text-base font-semibold">Weekly Insights</CardTitle>
-            </CardHeader>
-            <CardContent className="p-6">
-              <div className="space-y-6">
-                <div className="bg-amber-50 dark:bg-amber-900/10 p-4 rounded-xl border border-amber-100 dark:border-amber-900/20">
-                  <div className="flex gap-3">
-                    <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-500 shrink-0" />
-                    <div>
-                      <h4 className="text-sm font-medium text-amber-900 dark:text-amber-400">Pattern Detected</h4>
-                      <p className="text-xs text-amber-700 dark:text-amber-500/80 mt-1 leading-relaxed">
-                        You tend to hesitate on entries during the NY session open. Consider setting limit orders.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Performance by Session</h4>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-foreground">London</span>
-                      <div className="flex items-center gap-2">
-                        <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
-                          <div className="h-full bg-primary w-[70%]"></div>
-                        </div>
-                        <span className="text-xs font-medium">70%</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-foreground">New York</span>
-                      <div className="flex items-center gap-2">
-                        <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
-                          <div className="h-full bg-primary w-[45%]"></div>
-                        </div>
-                        <span className="text-xs font-medium">45%</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-foreground">Asian</span>
-                      <div className="flex items-center gap-2">
-                        <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
-                          <div className="h-full bg-primary w-[30%]"></div>
-                        </div>
-                        <span className="text-xs font-medium">30%</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr className="bg-[#0C0C0C]">
+                  <td colSpan={8} className="px-4 py-8 text-center text-sm text-[#888888]">
+                    Loading trades...
+                  </td>
+                </tr>
+              ) : recentTrades.length === 0 ? (
+                <tr className="bg-[#0C0C0C]">
+                  <td colSpan={8} className="px-4 py-8 text-center text-sm text-[#888888]">
+                    No trades yet.
+                  </td>
+                </tr>
+              ) : (
+                recentTrades.map((trade, index) => (
+                  <tr key={trade.id} className={index % 2 === 0 ? 'bg-[#0C0C0C]' : 'bg-[#141414]'}>
+                    <td className="px-4 py-3 text-sm text-[#F0F0F0]">{formatDate(trade.trade_timestamp)}</td>
+                    <td className="px-4 py-3 text-sm font-medium text-[#F0F0F0]">{trade.instrument || '-'}</td>
+                    <td className="px-4 py-3 text-sm">
+                      <span
+                        className={[
+                          'inline-flex rounded-full px-2 py-0.5 text-xs font-semibold',
+                          trade.direction === 'LONG'
+                            ? 'bg-[#1C1C1C] text-[#4CAF7A]'
+                            : 'bg-[#1C1C1C] text-[#C0504A]',
+                        ].join(' ')}
+                      >
+                        {trade.direction || '-'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-[#F0F0F0]">{formatPrice(trade.entry_price)}</td>
+                    <td className="px-4 py-3 text-sm text-[#F0F0F0]">{formatPrice(trade.exit_price)}</td>
+                    <td
+                      className={[
+                        'px-4 py-3 text-sm font-medium',
+                        trade.result === 'WIN'
+                          ? 'text-[#4CAF7A]'
+                          : trade.result === 'LOSS'
+                            ? 'text-[#C0504A]'
+                            : 'text-[#F0F0F0]',
+                      ].join(' ')}
+                    >
+                      {trade.result || '-'}
+                    </td>
+                    <td
+                      className={[
+                        'px-4 py-3 text-sm font-medium',
+                        (trade.r_multiple || 0) > 0
+                          ? 'text-[#4CAF7A]'
+                          : (trade.r_multiple || 0) < 0
+                            ? 'text-[#C0504A]'
+                            : 'text-[#F0F0F0]',
+                      ].join(' ')}
+                    >
+                      {formatR(trade.r_multiple)}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-[#F0F0F0]">{trade.emotion || '-'}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
+
+      {error ? <p className="text-sm text-[#C0504A]">{error}</p> : null}
     </div>
   );
 }
+

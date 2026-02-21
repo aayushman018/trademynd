@@ -10,6 +10,8 @@ interface User {
   name: string;
   user_id: string;
   plan: string;
+  telegram_connected?: boolean;
+  telegram_chat_id?: number | null;
 }
 
 interface AuthContextType {
