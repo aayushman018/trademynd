@@ -646,14 +646,22 @@ class BotService:
 
     async def _handle_photo_message(self, chat_id: int, user: User, message: dict):
         caption = (message.get("caption") or "").strip()
-        parsed_trade = self._parse_trade_text(caption) if caption else None
+        
+        # We parse the caption ONLY for P&L/Result context, NOT for instrument/prices.
+        # This prevents "Hit 50" from being read as Instrument=HIT, Entry=50.
+        parsed_caption_result = self._parse_trade_text(caption) if caption else None
 
-        instrument = parsed_trade["instrument"] if parsed_trade else "SCREENSHOT"
-        direction = parsed_trade["direction"] if parsed_trade else None
-        entry_price = parsed_trade["entry_price"] if parsed_trade else None
-        exit_price = parsed_trade["exit_price"] if parsed_trade else None
-        result = parsed_trade["result"] if parsed_trade else "PENDING"
-        r_multiple = parsed_trade["r_multiple"] if parsed_trade else None
+        instrument = "SCREENSHOT"
+        direction = None
+        entry_price = None
+        exit_price = None
+        result = "PENDING"
+        r_multiple = None
+        
+        # If caption explicitly has result info (Win/Loss), we can take it.
+        if parsed_caption_result:
+            if parsed_caption_result.get("result") != "PENDING":
+                result = parsed_caption_result.get("result")
 
         photos = message.get("photo") or []
         file_id = None
@@ -674,29 +682,27 @@ class BotService:
                 return self.send_message(chat_id, "AI analysis failed. Please try again.")
 
         if vision_trade:
-            # Prioritize AI vision for Instrument as requested (chart top-left is reliable)
+            # STRICT RULE: Instrument MUST come from AI Vision (Chart)
             if vision_trade.get("instrument") and vision_trade.get("instrument") != "UNKNOWN":
                 instrument = vision_trade.get("instrument")
             
-            # Prioritize AI vision for Direction if regex failed or AI is confident
+            # STRICT RULE: Direction MUST come from AI Vision (Chart)
             if vision_trade.get("direction") and vision_trade.get("direction") != "UNKNOWN":
-                 # If regex found direction, maybe trust regex? Caption "Long XAU" is strong.
-                 # But if regex is None, use AI.
-                 if not direction:
-                     direction = vision_trade.get("direction")
+                direction = vision_trade.get("direction")
 
+            # STRICT RULE: Prices MUST come from AI Vision (Chart)
             try:
-                if not entry_price:
-                    entry_price = Decimal(str(vision_trade.get("entry_price") or 0.0)) or None
-                if not exit_price:
-                    exit_price = Decimal(str(vision_trade.get("exit_price") or 0.0)) or None
+                if vision_trade.get("entry_price"):
+                    entry_price = Decimal(str(vision_trade.get("entry_price")))
+                if vision_trade.get("exit_price"):
+                    exit_price = Decimal(str(vision_trade.get("exit_price")))
             except Exception:
                 pass
 
             if caption and vision_trade.get("notes") is None:
                 vision_trade["notes"] = caption
                 
-            # Update result from AI if regex didn't find one (AI parses caption too)
+            # Result can come from AI (which parses caption too) or fallback to caption regex
             if result == "PENDING" and vision_trade.get("result") and vision_trade.get("result") != "PENDING":
                 result = vision_trade.get("result")
         
@@ -712,7 +718,7 @@ class BotService:
         
         # If instrument is unknown after vision, we can't save effectively without more info
         if instrument == "UNKNOWN" or instrument == "SCREENSHOT":
-             return self.send_message(chat_id, "I couldn't identify the instrument from the screenshot. Please add a caption like `Long XAUUSD`.")
+             return self.send_message(chat_id, "I couldn't identify the instrument from the screenshot chart. Please ensure the ticker is visible in the top-left.")
 
         try:
             trade = self.trade_service.create_trade(
