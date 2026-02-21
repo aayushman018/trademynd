@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -480,13 +480,13 @@ export default function HomePage() {
             ))}
           </div>
 
-          <div className="relative mx-auto grid w-full max-w-7xl gap-16 lg:grid-cols-2 lg:items-center">
+          <div className="relative mx-auto grid w-full max-w-7xl gap-16 lg:grid-cols-2 lg:items-start lg:pt-12">
             <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }}>
               <p className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#C9A84C]/35 bg-[#C9A84C]/10 px-3 py-1 text-xs font-medium tracking-wide text-[#E8C97A]">
                 <Sparkles className="h-3.5 w-3.5" /> AI-Powered Trading Intelligence
               </p>
               <h1 className="text-balance text-5xl font-semibold leading-[1.05] tracking-tight sm:text-6xl lg:text-7xl">
-                Journal every trade without leaving <span className="text-[#229ED9]">Telegram</span>.
+                Journal every trade without leaving <span className="text-[#C9A84C]">Telegram</span>.
               </h1>
               <p className="mt-6 max-w-xl text-lg leading-relaxed text-[#888888]">
                 AI extracts your trade data, tracks your edge, and delivers red folder news — before the market moves. In your language.
