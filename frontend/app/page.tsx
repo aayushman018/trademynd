@@ -9,8 +9,10 @@ import {
   BarChart3,
   Bot,
   Flame,
+  Image,
   LineChart,
   MessageSquare,
+  Mic,
   PieChart,
   ShieldCheck,
   Sparkles,
@@ -123,19 +125,19 @@ const TelegramAnimation = () => {
       
       // Sequence timings
       const times = loop === 0 
-        ? [500, 1700, 3200, 6000] // Trade Loop
-        : [500, 2500, 6500];      // News Loop
+        ? [500, 2000, 3500, 5000, 8000] // Trade Loop (Voice -> Image -> Typing -> Bot -> Dash)
+        : [500, 2500, 6500];            // News Loop
 
       // Schedule steps
       times.forEach((t, i) => {
         setTimeout(() => setStep(i + 1), t);
       });
 
-      // Reset and switch loop after 10s
+      // Reset and switch loop after 12s
       timeout = setTimeout(() => {
         setLoop(prev => prev === 0 ? 1 : 0);
         runSequence();
-      }, 10000);
+      }, 12000);
     };
 
     runSequence();
@@ -171,22 +173,60 @@ const TelegramAnimation = () => {
                 exit={{ opacity: 0 }}
                 className="space-y-4"
               >
-                {/* Step 1: User Message */}
+                {/* Step 1: User Voice Note */}
                 {step >= 1 && (
                   <motion.div
                     initial={{ opacity: 0, x: 20, scale: 0.95 }}
                     animate={{ opacity: 1, x: 0, scale: 1 }}
                     className="flex justify-end"
                   >
-                    <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-[#3B82F6]/20 border border-[#3B82F6]/30 px-4 py-3 text-sm text-[#F0F0F0]">
-                      <p>XAUUSD mein long liya 2340 pe, stop 2330, target 2365 🎯</p>
-                      <p className="mt-1 text-[10px] text-right text-white/40">10:42 AM</p>
+                    <div className="flex items-center gap-3 rounded-2xl rounded-tr-sm bg-[#3B82F6]/20 border border-[#3B82F6]/30 px-4 py-3 text-sm text-[#F0F0F0]">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#3B82F6]/30">
+                        <Mic className="h-4 w-4 text-[#3B82F6]" />
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1">
+                          {[1, 2, 3, 4, 5, 4, 3, 2].map((h, i) => (
+                            <motion.div
+                              key={i}
+                              animate={{ height: [4, 12, 4] }}
+                              transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.1 }}
+                              className="w-0.5 bg-[#3B82F6] rounded-full"
+                              style={{ height: h * 2 }}
+                            />
+                          ))}
+                        </div>
+                        <p className="text-[10px] text-white/40">0:12 • Voice Note</p>
+                      </div>
                     </div>
                   </motion.div>
                 )}
 
-                {/* Step 2: Typing Indicator */}
-                {step === 2 && (
+                {/* Step 2: User Screenshot */}
+                {step >= 2 && (
+                  <motion.div
+                    initial={{ opacity: 0, x: 20, scale: 0.95 }}
+                    animate={{ opacity: 1, x: 0, scale: 1 }}
+                    transition={{ delay: 0.2 }}
+                    className="flex justify-end"
+                  >
+                    <div className="max-w-[70%] overflow-hidden rounded-2xl rounded-tr-sm bg-[#3B82F6]/20 border border-[#3B82F6]/30 p-1">
+                      <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-[#000]/40">
+                         <div className="absolute inset-0 flex items-center justify-center">
+                            <Image className="h-6 w-6 text-[#3B82F6]/50" />
+                         </div>
+                         {/* Faux Chart Lines */}
+                         <svg className="absolute inset-0 h-full w-full opacity-30" preserveAspectRatio="none">
+                           <path d="M0,50 Q20,40 40,60 T80,30 T120,50 T160,20" fill="none" stroke="#3B82F6" strokeWidth="2" />
+                         </svg>
+                      </div>
+                      <p className="px-2 py-1 text-[10px] text-right text-white/40">10:43 AM</p>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Step 3: Typing Indicator */}
+                {step === 3 && (
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -199,8 +239,8 @@ const TelegramAnimation = () => {
                   </motion.div>
                 )}
 
-                {/* Step 3: Bot Card - Progressive Disclosure */}
-                {step >= 3 && (
+                {/* Step 4: Bot Card - Progressive Disclosure */}
+                {step >= 4 && (
                   <motion.div
                     initial={{ opacity: 0, y: 20, scale: 0.95 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
