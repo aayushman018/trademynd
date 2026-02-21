@@ -18,6 +18,7 @@ from app.services.telegram_connect_service import (
     TelegramTokenStoreError,
     consume_connect_token,
 )
+from app.services.telegram_service import TelegramDeliveryError, download_telegram_file
 from app.services.trade_service import PlanLimitExceeded, TradeService
 
 logger = logging.getLogger(__name__)
@@ -57,6 +58,13 @@ class BotService:
     def __init__(self, db: Session):
         self.db = db
         self.trade_service = TradeService(db)
+        self.ai_service = None
+        try:
+            from app.services.ai_service import AIService
+
+            self.ai_service = AIService()
+        except Exception as exc:
+            print(f"AI service unavailable: {exc}")
 
     async def process_update(self, update: dict):
         message = update.get("message")
@@ -223,6 +231,30 @@ class BotService:
         if photos:
             file_id = photos[-1].get("file_id")
 
+        vision_trade = None
+        if self.ai_service and file_id:
+            try:
+                image_bytes = await download_telegram_file(file_id)
+                vision_trade = await self.ai_service.analyze_screenshot(image_bytes, caption=caption or None)
+            except TelegramDeliveryError as exc:
+                logger.info("Telegram photo download unavailable: %s", exc)
+            except Exception:
+                logger.exception("Screenshot analysis failed for user_id=%s", user.id)
+
+        if vision_trade and (not parsed_trade or parsed_trade.get("instrument") == "SCREENSHOT"):
+            instrument = vision_trade.get("instrument") or instrument
+            direction = vision_trade.get("direction") or direction
+            try:
+                if not entry_price:
+                    entry_price = Decimal(str(vision_trade.get("entry_price") or 0.0)) or None
+                if not exit_price:
+                    exit_price = Decimal(str(vision_trade.get("exit_price") or 0.0)) or None
+            except Exception:
+                pass
+
+            if caption and vision_trade.get("notes") is None:
+                vision_trade["notes"] = caption
+
         try:
             trade = self.trade_service.create_trade(
                 user.id,
@@ -240,6 +272,7 @@ class BotService:
                         "caption": caption,
                         "telegram_message_id": message.get("message_id"),
                         "telegram_photo_file_id": file_id,
+                        "vision_trade": vision_trade,
                     },
                 ),
             )
@@ -249,7 +282,7 @@ class BotService:
             logger.exception("Failed to create trade from Telegram screenshot for user_id=%s", user.id)
             return self.send_message(chat_id, "Screenshot received, but I could not save it. Please try again.")
 
-        if parsed_trade:
+        if parsed_trade or (vision_trade and (vision_trade.get("confidence") or 0) >= 0.45):
             reply = (
                 f"Screenshot logged: {trade.direction or '-'} {trade.instrument}\n"
                 f"Entry: {trade.entry_price if trade.entry_price is not None else '-'} | "
