@@ -488,7 +488,7 @@ export default function HomePage() {
               <h1 className="text-balance text-5xl font-semibold leading-[1.05] tracking-tight sm:text-6xl lg:text-7xl">
                 Journal every trade without leaving <span className="text-[#C9A84C]">Telegram</span>.
               </h1>
-              <p className="mt-6 max-w-xl text-lg leading-relaxed text-[#888888]">
+              <p className="mt-6 max-w-lg text-lg leading-relaxed text-[#888888]">
                 AI extracts your trade data, tracks your edge, and delivers red folder news — before the market moves. In your language.
               </p>
 
@@ -506,7 +506,7 @@ export default function HomePage() {
                 </p>
               </div>
 
-              <div className="mt-10 border-t border-[#2A2A2A] pt-6">
+              <div className="mt-10 border-t border-[#2A2A2A] pt-6 pb-2">
                 <p className="mb-3 text-[10px] uppercase tracking-widest text-[#555555]">Powered by <span className="text-[#C9A84C]">Sarvam AI</span> · Available In</p>
                 <div className="flex flex-wrap gap-2">
                    {['English', 'हिंदी', 'தமிழ்', 'తెలుగు', 'मराठी', 'ਪੰਜਾਬੀ'].map(lang => (
