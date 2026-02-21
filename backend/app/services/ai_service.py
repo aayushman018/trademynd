@@ -68,17 +68,19 @@ class AIService:
         if self.vision_model:
             try:
                 prompt = f"""
-                Analyze this trading screenshot and extract the following details.
+                You are a trading journal assistant. Analyze TradingView chart screenshots. The instrument ticker is always in the top-left corner. Always attempt to read it. Extract: instrument, timeframe, direction (long/short), entry, SL, TP, and result. If something is not visible, make your best inference. Never say you cannot identify the chart.
+                
+                Also parse the user's text caption sent along with the image. If the caption says something like 'made 20' or 'lost 50', extract that as the trade result.
+                
                 Caption provided by user: "{caption or ''}"
                 
                 Return ONLY a JSON object with these keys:
-                instrument (e.g. BTCUSDT, XAUUSD), direction (LONG/SHORT), 
+                instrument (e.g. BTCUSDT, XAUUSD), timeframe (e.g. 1m, 5m, 1h, 4h, D), direction (LONG/SHORT), 
                 entry_price (number), exit_price (number), current_price (number), 
                 pnl_value (number), pnl_percent (number), stop_loss (number), take_profit (number), 
                 result (WIN/LOSS/PENDING/BREAK_EVEN), confidence (0.0 to 1.0).
                 
                 If a value is not visible or cannot be inferred, use null.
-                Infer direction from entry vs current price if explicit direction is missing.
                 """
                 
                 # Pass image bytes directly with mime_type
@@ -263,6 +265,7 @@ class AIService:
             }
 
         instrument = (data.get("instrument") or "UNKNOWN").strip() if isinstance(data.get("instrument"), str) else "UNKNOWN"
+        timeframe = (data.get("timeframe") or "").strip() if isinstance(data.get("timeframe"), str) else None
         direction = (data.get("direction") or "UNKNOWN").strip().upper() if isinstance(data.get("direction"), str) else "UNKNOWN"
 
         entry_price = float(data.get("entry_price") or 0.0)
@@ -290,6 +293,7 @@ class AIService:
 
         return {
             "instrument": instrument,
+            "timeframe": timeframe,
             "direction": direction,
             "entry_price": entry_price,
             "exit_price": exit_price,

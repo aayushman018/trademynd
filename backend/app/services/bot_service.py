@@ -673,9 +673,18 @@ class BotService:
                 logger.exception("Screenshot analysis failed for user_id=%s", user.id)
                 return self.send_message(chat_id, "AI analysis failed. Please try again.")
 
-        if vision_trade and (not parsed_trade or parsed_trade.get("instrument") == "SCREENSHOT"):
-            instrument = vision_trade.get("instrument") or instrument
-            direction = vision_trade.get("direction") or direction
+        if vision_trade:
+            # Prioritize AI vision for Instrument as requested (chart top-left is reliable)
+            if vision_trade.get("instrument") and vision_trade.get("instrument") != "UNKNOWN":
+                instrument = vision_trade.get("instrument")
+            
+            # Prioritize AI vision for Direction if regex failed or AI is confident
+            if vision_trade.get("direction") and vision_trade.get("direction") != "UNKNOWN":
+                 # If regex found direction, maybe trust regex? Caption "Long XAU" is strong.
+                 # But if regex is None, use AI.
+                 if not direction:
+                     direction = vision_trade.get("direction")
+
             try:
                 if not entry_price:
                     entry_price = Decimal(str(vision_trade.get("entry_price") or 0.0)) or None
@@ -686,6 +695,10 @@ class BotService:
 
             if caption and vision_trade.get("notes") is None:
                 vision_trade["notes"] = caption
+                
+            # Update result from AI if regex didn't find one (AI parses caption too)
+            if result == "PENDING" and vision_trade.get("result") and vision_trade.get("result") != "PENDING":
+                result = vision_trade.get("result")
         
         # Validation
         trade_data = {
