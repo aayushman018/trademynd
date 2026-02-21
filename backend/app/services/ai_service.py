@@ -24,10 +24,11 @@ SARVAM_API_KEY = settings.SARVAM_API_KEY or os.getenv("SARVAM_API_KEY")
 
 class AIService:
     def __init__(self):
-        # Initialize Gemini 1.5 Flash for multimodal capabilities (Text, Image, Audio)
-        self.gemini_model = genai.GenerativeModel("gemini-1.5-flash")
+        # Initialize Gemini 2.0 Flash for multimodal capabilities (Text, Image, Audio)
+        # Using 2.0 Flash as requested for improved recognition
+        self.gemini_model = genai.GenerativeModel("gemini-2.0-flash")
         # Keep gemini-pro-vision for backward compatibility or specific vision tasks if needed
-        self.vision_model = genai.GenerativeModel("gemini-1.5-flash") 
+        self.vision_model = genai.GenerativeModel("gemini-2.0-flash") 
 
         self.sarvam_client: OpenAI | None = None
         if SARVAM_API_KEY:
@@ -63,7 +64,7 @@ class AIService:
                 "error": "Invalid image input",
             }
 
-        # Use Gemini 1.5 Flash for vision analysis
+        # Use Gemini 2.0 Flash for vision analysis
         if self.vision_model:
             try:
                 prompt = f"""
@@ -128,7 +129,7 @@ class AIService:
         """
 
         try:
-            # Use Gemini 1.5 Flash
+            # Use Gemini 2.0 Flash
             if self.gemini_model:
                 response = self.gemini_model.generate_content(f"{system_prompt}\n\n{user_prompt}")
                 return response.text or "Trade logged! Good job following your plan. 📉📈"
@@ -147,7 +148,7 @@ class AIService:
 
     async def analyze_voice(self, audio_data: Any) -> dict:
         """
-        Analyze voice note using Gemini 1.5 Flash (multimodal).
+        Analyze voice note using Gemini 2.0 Flash (multimodal).
         """
         audio_bytes = self._coerce_image_bytes(audio_data) # Reusing coerce function for bytes
         if not audio_bytes:
@@ -163,7 +164,7 @@ class AIService:
                 If values are missing, use null.
                 """
                 
-                # Pass audio bytes directly (Gemini 1.5 supports audio input)
+                # Pass audio bytes directly (Gemini 2.0 supports audio input)
                 # Note: For audio, mime_type is usually audio/mp3 or audio/wav. 
                 # Telegram usually sends OGG or MP3. We'll assume a generic type or try to detect.
                 # For safety with the API, audio/mp3 is a good default to try if format is unknown, 
@@ -187,11 +188,11 @@ class AIService:
 
     async def analyze_text(self, text: str) -> dict:
         """
-        Analyze text using Gemini 1.5 Flash (primary).
+        Analyze text using Gemini 2.0 Flash (primary).
         """
         # Use Gemini
         try:
-            print("Using Gemini 1.5 Flash...")
+            print("Using Gemini 2.0 Flash...")
             prompt = f"""
             Extract trading data from the following text. 
             Return a JSON object with keys: instrument (e.g. BTCUSDT), direction (LONG/SHORT), 
