@@ -526,28 +526,19 @@ export default function HomePage() {
         </section>
 
         <section className="relative z-20 border-y border-[#2A2A2A] bg-[#0C0C0C]">
-          <div className="mx-auto max-w-7xl px-6 py-8 lg:px-8">
-             <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-                <div>
-                   <h3 className="text-sm font-semibold text-[#F0F0F0]">Live Trade Feed</h3>
-                   <p className="text-xs text-[#888888]">Real-time execution from the community</p>
-                </div>
-                <div className="flex gap-3 overflow-x-auto pb-2 md:pb-0 no-scrollbar">
-                   {feed.slice(0, 4).map((t, i) => (
-                      <div key={i} className="flex min-w-[180px] flex-col rounded-lg border border-[#2A2A2A] bg-[#141414] p-3">
-                         <div className="flex items-center justify-between mb-2">
-                            <span className="font-mono text-xs font-medium text-[#F0F0F0]">{t.instrument}</span>
-                            <span className={`text-[10px] font-bold ${t.result === 'WIN' ? 'text-[#4CAF7A]' : t.result === 'LOSS' ? 'text-[#C0504A]' : 'text-[#888888]'}`}>{t.result}</span>
-                         </div>
-                         <div className="flex items-center justify-between text-[10px] text-[#888888]">
-                            <span className={t.direction === 'LONG' ? 'text-[#4CAF7A]' : 'text-[#C0504A]'}>{t.direction}</span>
-                            <span>{t.r}</span>
-                         </div>
-                      </div>
-                   ))}
-                </div>
+           <div className="ticker-fade mx-auto max-w-[1800px] overflow-hidden">
+             <div className="ticker-track flex min-w-max items-center gap-6 py-3">
+               {[...feed, ...feed, ...feed].map((t, i) => (
+                 <div key={`${t.instrument}-${i}`} className="flex items-center gap-2 rounded-full border border-[#2A2A2A] bg-[#141414]/90 px-4 py-1.5 text-xs">
+                   <span className="font-semibold">{t.instrument}</span>
+                   <span className={t.direction === 'LONG' ? 'text-[#C9A84C]' : 'text-[#C0504A]'}>{t.direction}</span>
+                   <span className="text-[#555555]">-</span>
+                   <span className={t.result === 'WIN' ? 'text-[#4CAF7A]' : t.result === 'LOSS' ? 'text-[#C0504A]' : 'text-[#888888]'}>{t.r}</span>
+                   <span className="rounded bg-[#1C1C1C]/80 px-1.5 py-0.5 text-[10px] text-[#555555]">{t.result}</span>
+                 </div>
+               ))}
              </div>
-          </div>
+           </div>
         </section>
 
         <section className="mx-auto max-w-7xl px-6 py-24 lg:px-8">
