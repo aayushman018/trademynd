@@ -20,12 +20,14 @@ class TradeMistake(TradeMistakeBase):
 
 class TradeBase(BaseModel):
     instrument: str
+    timeframe: Optional[str] = None
     direction: Optional[str] = None
     entry_price: Optional[Decimal] = None
     exit_price: Optional[Decimal] = None
     stop_loss: Optional[Decimal] = None
     take_profit: Optional[Decimal] = None
     result: Optional[str] = None
+    pnl_amount: Optional[Decimal] = None
     r_multiple: Optional[Decimal] = None
     emotion: Optional[str] = None
     trade_timestamp: Optional[datetime] = None

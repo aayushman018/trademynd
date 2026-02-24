@@ -514,6 +514,9 @@ export default function HomePage() {
             TRADEMYND
           </div>
           <div className="flex items-center gap-3">
+            <Link href="/collaborate" className="rounded-lg border border-[#2A2A2A] px-4 py-2 text-sm text-[#888888] transition hover:border-[#3A3A3A] hover:text-[#F0F0F0]">
+              Collaborate
+            </Link>
             <Link href="/pricing" className="rounded-lg border border-[#2A2A2A] px-4 py-2 text-sm text-[#888888] transition hover:border-[#3A3A3A] hover:text-[#F0F0F0]">
               Pricing
             </Link>

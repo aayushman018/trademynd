@@ -61,6 +61,8 @@ class Settings(BaseSettings):
     @classmethod
     def strip_string_values(cls, value: str | None) -> str | None:
         if isinstance(value, str):
+            value = value.replace("\\n", "")
+            value = value.replace("\\r", "")
             return value.strip()
         return value
 

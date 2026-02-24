@@ -1,353 +1,172 @@
-import asyncio
+from __future__ import annotations
+
+import base64
 import json
-import tempfile
-import zipfile
-from typing import Any
-import google.generativeai as genai
 import os
+from typing import Any
+
+import httpx
+
 from app.core.config import settings
-from openai import OpenAI
 
-try:
-    from sarvamai import SarvamAI
-except Exception:
-    SarvamAI = None
-
-# Configure Gemini
-# Using the key provided by the user if not in settings
 GOOGLE_API_KEY = settings.GOOGLE_API_KEY or os.getenv("GOOGLE_API_KEY")
-if GOOGLE_API_KEY:
-    genai.configure(api_key=GOOGLE_API_KEY)
 
-# Configure Sarvam AI
-SARVAM_API_KEY = settings.SARVAM_API_KEY or os.getenv("SARVAM_API_KEY")
+IMAGE_SYSTEM_PROMPT = """You are an expert trading journal parser. You will receive a TradingView chart screenshot and a caption from the user. Return ONLY a valid JSON object, nothing else.
+
+Rules for extracted JSON fields:
+- `instrument`: Look strictly at the top-left corner of the chart for the asset name. Convert the full name to a standard ticker symbol (e.g., "Euro / Japanese Yen" -> "EURJPY", "Gold" -> "XAUUSD"). Ignore any indicator names (like "Imbalance Finder" or "HIT"). Do NOT use the caption.
+- `timeframe`: Read the chart timeframe from the top-left corner next to the instrument name (e.g., 1m, 5m, 15m, 1h, 4h, 1D).
+- `direction`: Determine from the TradingView position tool. "LONG" if the green reward box is ABOVE the red risk box. "SHORT" if the red risk box is ABOVE the green reward box.
+- `entry`: Read the entry price strictly from the gray/grey/white text label on the right price axis where the split between the red/green boxes occurs. If not visible, return null. Do NOT guess.
+- `sl`: Read the stop loss price (the red text label on the right price axis).
+- `tp`: Read the take profit price (the green text label on the right price axis).
+- `result`: Strictly "WIN" or "LOSS" based on the context of the user's caption text.
+- `pnl_amount`: The exact numeric profit or loss amount extracted from the caption text (e.g., "loss of 50" -> 50, "made 200" -> 200). Return just the number, or null if none."""
+
+TEXT_EXTRACTION_PROMPT = """Extract trading journal entry from this text. Return ONLY JSON with fields: instrument, direction, entry, sl, tp, result, pnl_amount. Infer as much as possible."""
+
+TRANSCRIBE_PROMPT = "Transcribe this trading voice/audio message. Return only the transcription text."
+
 
 class AIService:
     def __init__(self):
-        # Initialize Gemini 2.0 Flash for multimodal capabilities (Text, Image, Audio)
-        # Using 2.0 Flash as requested for improved recognition
-        self.gemini_model = genai.GenerativeModel("gemini-2.0-flash")
-        # Keep gemini-pro-vision for backward compatibility or specific vision tasks if needed
-        self.vision_model = genai.GenerativeModel("gemini-2.0-flash") 
+        self.api_key = GOOGLE_API_KEY
+        self.model_name = "gemini-2.0-flash"
 
-        self.sarvam_client: OpenAI | None = None
-        if SARVAM_API_KEY:
-            try:
-                self.sarvam_client = OpenAI(
-                    base_url="https://api.sarvam.ai/v1",
-                    api_key=SARVAM_API_KEY,
-                )
-            except Exception as exc:
-                print(f"Failed to initialize Sarvam AI client: {exc}")
+    async def analyze_screenshot(self, image_data: Any, caption: str | None = None, mime_type: str = "image/jpeg") -> dict:
+        image_bytes = self._coerce_bytes(image_data)
+        if not image_bytes or not self.api_key:
+            return self._empty_parsed_trade()
 
-        self.sarvam_vision: Any = None
-        if SARVAM_API_KEY and SarvamAI is not None:
-            try:
-                self.sarvam_vision = SarvamAI(api_subscription_key=SARVAM_API_KEY)
-            except Exception as exc:
-                print(f"Failed to initialize Sarvam Vision client: {exc}")
-
-    async def analyze_screenshot(self, image_data: Any, caption: str | None = None) -> dict:
-        image_bytes = self._coerce_image_bytes(image_data)
-        if not image_bytes:
-            return {
-                "instrument": "UNKNOWN",
-                "direction": "UNKNOWN",
-                "entry_price": 0.0,
-                "exit_price": 0.0,
-                "current_price": 0.0,
-                "pnl_value": 0.0,
-                "pnl_percent": 0.0,
-                "result": "PENDING",
-                "notes": caption or "",
-                "confidence": 0.0,
-                "error": "Invalid image input",
-            }
-
-        # Use Gemini 2.0 Flash for vision analysis
-        if self.vision_model:
-            try:
-                prompt = f"""
-                You are a trading journal assistant. Analyze TradingView chart screenshots. The instrument ticker is always in the top-left corner. Always attempt to read it. Extract: instrument, timeframe, direction (long/short), entry, SL, TP, and result. If something is not visible, make your best inference. Never say you cannot identify the chart.
-                
-                Also parse the user's text caption sent along with the image. If the caption says something like 'made 20' or 'lost 50', extract that as the trade result.
-                
-                Caption provided by user: "{caption or ''}"
-                
-                Return ONLY a JSON object with these keys:
-                instrument (e.g. BTCUSDT, XAUUSD), timeframe (e.g. 1m, 5m, 1h, 4h, D), direction (LONG/SHORT), 
-                entry_price (number), exit_price (number), current_price (number), 
-                pnl_value (number), pnl_percent (number), stop_loss (number), take_profit (number), 
-                result (WIN/LOSS/PENDING/BREAK_EVEN), confidence (0.0 to 1.0).
-                
-                If a value is not visible or cannot be inferred, use null.
-                """
-                
-                # Pass image bytes directly with mime_type
-                image_blob = {'mime_type': 'image/jpeg', 'data': image_bytes}
-                
-                response = self.vision_model.generate_content([prompt, image_blob])
-                result_text = response.text
-                return self._process_vision_trade_response(result_text, caption or "", None)
-            except Exception as e:
-                print(f"Gemini Vision Error: {e}")
-
-        # Fallback to Sarvam if Gemini fails (or if configured to do so)
-        # ... (Existing Sarvam logic can remain as fallback or be removed if strict rollback is desired)
-        # For now, we return error/empty if Gemini fails to stick to the "rollback to Gemini" instruction.
-        
-        return {
-            "instrument": "UNKNOWN",
-            "direction": "UNKNOWN",
-            "entry_price": 0.0,
-            "exit_price": 0.0,
-            "current_price": 0.0,
-            "pnl_value": 0.0,
-            "pnl_percent": 0.0,
-            "result": "PENDING",
-            "notes": caption or "",
-            "confidence": 0.0,
-            "error": "AI analysis failed",
-        }
-
-    async def generate_personality_response(self, trade_data: dict, user_message: str) -> str:
-        """
-        Generate a friendly, supportive, and motivational response based on the trade result.
-        """
-        system_prompt = (
-            "You are a friendly, supportive, and motivational trading companion bot named 'TradeMynd'. "
-            "Your goal is to encourage the trader, celebrate their wins, and offer constructive empathy for losses. "
-            "Be concise, professional but warm. Use emojis. "
-            "If the trade is a WIN, celebrate it. If it's a LOSS, remind them of risk management or psychology. "
-            "If it's PENDING, encourage them to follow their plan. "
-            "Never give financial advice. Focus on execution and psychology."
+        image_b64 = base64.b64encode(image_bytes).decode("ascii")
+        raw_response = await self._generate_content(
+            parts=[
+                {"text": f'Caption: "{caption or ""}"'},
+                {"inline_data": {"mime_type": mime_type, "data": image_b64}},
+            ],
+            system_prompt=IMAGE_SYSTEM_PROMPT,
         )
-
-        user_prompt = f"""
-        User Message: "{user_message}"
-        Trade Details: {json.dumps(trade_data, default=str)}
-        
-        Generate a short response (max 2 sentences) acknowledging the trade log.
-        """
-
-        try:
-            # Use Gemini 2.0 Flash
-            if self.gemini_model:
-                response = self.gemini_model.generate_content(f"{system_prompt}\n\n{user_prompt}")
-                return response.text or "Trade logged! Good job following your plan. 📉📈"
-
-        except Exception as e:
-            print(f"AI Persona Generation Error: {e}")
-        
-        # Static Fallback
-        result = trade_data.get("result", "PENDING")
-        if result == "WIN":
-            return "Great trade! 🚀 Added to your journal."
-        elif result == "LOSS":
-            return "Logged. Review the setup and move on to the next one. 💪"
-        else:
-            return "Trade logged. Stick to your plan! 🛡️"
-
-    async def analyze_voice(self, audio_data: Any) -> dict:
-        """
-        Analyze voice note using Gemini 2.0 Flash (multimodal).
-        """
-        audio_bytes = self._coerce_image_bytes(audio_data) # Reusing coerce function for bytes
-        if not audio_bytes:
-             return {"error": "Invalid audio data"}
-
-        if self.gemini_model:
-            try:
-                prompt = """
-                Listen to this trading voice note. Extract the following details into a JSON object:
-                instrument (e.g. BTCUSDT), direction (LONG/SHORT), entry_price (number), exit_price (number), 
-                result (WIN/LOSS/PENDING), emotion (e.g. calm, anxious, excited), confidence (0.0 to 1.0).
-                
-                If values are missing, use null.
-                """
-                
-                # Pass audio bytes directly (Gemini 2.0 supports audio input)
-                # Note: For audio, mime_type is usually audio/mp3 or audio/wav. 
-                # Telegram usually sends OGG or MP3. We'll assume a generic type or try to detect.
-                # For safety with the API, audio/mp3 is a good default to try if format is unknown, 
-                # or we rely on the API to detect.
-                audio_blob = {'mime_type': 'audio/mp3', 'data': audio_bytes}
-                
-                response = self.gemini_model.generate_content([prompt, audio_blob])
-                result_text = response.text
-                return self._process_ai_response(result_text, "Voice Note")
-                
-            except Exception as e:
-                print(f"Gemini Voice Analysis Error: {e}")
-        
-        return {
-            "instrument": "UNKNOWN",
-            "direction": "UNKNOWN",
-            "result": "PENDING",
-            "notes": "Voice analysis failed",
-            "confidence": 0.0
-        }
+        print(f"Gemini raw response (image): {raw_response}")
+        return self._parse_json_response(raw_response)
 
     async def analyze_text(self, text: str) -> dict:
-        """
-        Analyze text using Gemini 2.0 Flash (primary).
-        """
-        # Use Gemini
-        try:
-            print("Using Gemini 2.0 Flash...")
-            prompt = f"""
-            Extract trading data from the following text. 
-            Return a JSON object with keys: instrument (e.g. BTCUSDT), direction (LONG/SHORT), 
-            entry_price (number), exit_price (number), result (WIN/LOSS/PENDING/BREAK_EVEN).
-            If a value is missing, use null or 0.0.
-            
-            IMPORTANT: Do not treat verbs like "TOOK", "MADE", "GOT", "HAVE" as instruments.
-            If the text says "Took a profit of 200", the instrument is likely missing or implied from context.
-            If no valid financial instrument (like BTC, ETH, XAUUSD, EURUSD, NIFTY) is found, return "UNKNOWN" for instrument.
-            
-            Text: "{text}"
-            
-            JSON:
-            """
-            
-            response = self.gemini_model.generate_content(prompt)
-            result_text = response.text
-            return self._process_ai_response(result_text, text)
-            
-        except Exception as e:
-            print(f"Gemini Error: {e}")
-            # Fallback to regex
-            return self._fallback_analyze_text(text)
+        if not self.api_key:
+            return self._empty_parsed_trade()
 
-    def _process_ai_response(self, result_text: str, original_text: str) -> dict:
-        # Clean up markdown code blocks if present
-        if "```json" in result_text:
-            result_text = result_text.replace("```json", "").replace("```", "")
-        elif "```" in result_text:
-            result_text = result_text.replace("```", "")
-        
-        try:
-            data = json.loads(result_text)
-            
-            # Normalize keys
-            return {
-                "instrument": data.get("instrument", "UNKNOWN"),
-                "direction": data.get("direction", "UNKNOWN"),
-                "entry_price": float(data.get("entry_price") or 0.0),
-                "exit_price": float(data.get("exit_price") or 0.0),
-                "result": data.get("result", "PENDING"),
-                "emotion": data.get("emotion", "neutral"), # Added emotion support
-                "notes": original_text,
-                "confidence": float(data.get("confidence") or 0.9)
-            }
-        except json.JSONDecodeError:
-            print(f"JSON Decode Error: {result_text}")
-            # raise Exception("Invalid JSON response from AI") # Don't raise, fallback
-            return self._fallback_analyze_text(original_text)
+        raw_response = await self._generate_content(
+            parts=[{"text": f"{TEXT_EXTRACTION_PROMPT}\n\nText:\n{text}"}],
+        )
+        print(f"Gemini raw response (text): {raw_response}")
+        return self._parse_json_response(raw_response)
 
-    def _process_vision_trade_response(self, result_text: str, notes: str, ocr_text: str | None) -> dict:
-        cleaned = result_text
+    async def transcribe_audio(self, audio_data: Any, mime_type: str = "audio/ogg") -> str:
+        audio_bytes = self._coerce_bytes(audio_data)
+        if not audio_bytes or not self.api_key:
+            return ""
+
+        audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
+        raw_response = await self._generate_content(
+            parts=[
+                {"text": TRANSCRIBE_PROMPT},
+                {"inline_data": {"mime_type": mime_type, "data": audio_b64}},
+            ],
+        )
+        print(f"Gemini raw response (audio transcription): {raw_response}")
+        return (raw_response or "").strip()
+
+    async def _generate_content(self, parts: list[dict], system_prompt: str | None = None) -> str:
+        if not self.api_key:
+            return ""
+
+        url = (
+            f"https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{self.model_name}:generateContent?key={self.api_key}"
+        )
+        payload: dict[str, Any] = {"contents": [{"role": "user", "parts": parts}]}
+        if system_prompt:
+            payload["system_instruction"] = {"parts": [{"text": system_prompt}]}
+
+        async with httpx.AsyncClient(timeout=45.0) as client:
+            response = await client.post(url, json=payload)
+
+        if response.status_code >= 400:
+            print(f"Gemini API error ({response.status_code}): {response.text}")
+            return ""
+
+        data = response.json()
+        candidates = data.get("candidates") or []
+        if not candidates:
+            return ""
+        content = (candidates[0].get("content") or {}).get("parts") or []
+        if not content:
+            return ""
+        return content[0].get("text", "") or ""
+
+    def _parse_json_response(self, raw_text: str) -> dict:
+        if not raw_text:
+            return self._empty_parsed_trade()
+
+        cleaned = raw_text.strip()
         if "```json" in cleaned:
-            cleaned = cleaned.replace("```json", "").replace("```", "")
+            cleaned = cleaned.replace("```json", "").replace("```", "").strip()
         elif "```" in cleaned:
-            cleaned = cleaned.replace("```", "")
+            cleaned = cleaned.replace("```", "").strip()
+
+        if not cleaned.startswith("{"):
+            start = cleaned.find("{")
+            end = cleaned.rfind("}")
+            if start != -1 and end != -1 and end > start:
+                cleaned = cleaned[start : end + 1]
 
         try:
-            data = json.loads(cleaned)
+            parsed = json.loads(cleaned)
+            if isinstance(parsed, dict):
+                return self._normalize_trade_payload(parsed)
         except json.JSONDecodeError:
-             print(f"JSON Decode Error (Vision): {result_text}")
-             return {
-                "instrument": "UNKNOWN",
-                "direction": "UNKNOWN",
-                "result": "PENDING",
-                "confidence": 0.0,
-                "error": "Failed to parse AI response"
-            }
+            print(f"Gemini JSON parse error: {raw_text}")
+        return self._empty_parsed_trade()
 
-        instrument = (data.get("instrument") or "UNKNOWN").strip() if isinstance(data.get("instrument"), str) else "UNKNOWN"
-        timeframe = (data.get("timeframe") or "").strip() if isinstance(data.get("timeframe"), str) else None
-        direction = (data.get("direction") or "UNKNOWN").strip().upper() if isinstance(data.get("direction"), str) else "UNKNOWN"
-
-        entry_price = float(data.get("entry_price") or 0.0)
-        exit_price = float(data.get("exit_price") or 0.0)
-        current_price = float(data.get("current_price") or 0.0)
-        pnl_value = data.get("pnl_value")
-        pnl_percent = data.get("pnl_percent")
-        stop_loss = data.get("stop_loss")
-        take_profit = data.get("take_profit")
-
-        normalized_pnl_value = float(pnl_value) if pnl_value is not None else 0.0
-        normalized_pnl_percent = float(pnl_percent) if pnl_percent is not None else 0.0
-        normalized_stop_loss = float(stop_loss) if stop_loss is not None else 0.0
-        normalized_take_profit = float(take_profit) if take_profit is not None else 0.0
-
-        if direction not in {"LONG", "SHORT"} and entry_price and current_price and current_price != entry_price:
-            direction = "LONG" if current_price > entry_price else "SHORT"
-
-        result = data.get("result") or "PENDING"
-        if isinstance(result, str):
-            result = result.strip().upper()
-
-        confidence = float(data.get("confidence") or 0.0)
-        confidence = max(0.0, min(1.0, confidence))
-
-        return {
-            "instrument": instrument,
-            "timeframe": timeframe,
-            "direction": direction,
-            "entry_price": entry_price,
-            "exit_price": exit_price,
-            "current_price": current_price,
-            "pnl_value": normalized_pnl_value,
-            "pnl_percent": normalized_pnl_percent,
-            "stop_loss": normalized_stop_loss,
-            "take_profit": normalized_take_profit,
-            "result": result,
-            "notes": notes,
-            "confidence": confidence,
-            "ocr_text": ocr_text[:2000] if ocr_text else None,
-        }
-
-    # Helper methods (Sarvam OCR and coercion) remain if needed, but coercion is used by new logic.
-    # Sarvam OCR logic is effectively unused now but kept as dead code/fallback if we wanted.
-    
-    def _sarvam_document_intelligence_markdown(self, image_bytes: bytes) -> str:
-         # ... (existing code, now unused by primary path) ...
-         return "" 
-
-    def _coerce_image_bytes(self, image_data: Any) -> bytes | None:
-        if image_data is None:
+    def _coerce_bytes(self, input_data: Any) -> bytes | None:
+        if input_data is None:
             return None
-        if isinstance(image_data, (bytes, bytearray)):
-            return bytes(image_data)
-        if hasattr(image_data, "read"):
+        if isinstance(input_data, (bytes, bytearray)):
+            return bytes(input_data)
+        if hasattr(input_data, "read"):
             try:
-                return image_data.read()
+                return input_data.read()
             except Exception:
                 return None
         return None
-            
-    def _fallback_analyze_text(self, text: str) -> dict:
-        # Simple keyword extraction for demo
-        instrument = "UNKNOWN"
-        direction = "UNKNOWN"
-        
-        if "BTC" in text.upper():
-            instrument = "BTCUSDT"
-        if "ETH" in text.upper():
-            instrument = "ETHUSDT"
-            
-        if "long" in text.lower() or "buy" in text.lower():
-            direction = "LONG"
-        elif "short" in text.lower() or "sell" in text.lower():
-            direction = "SHORT"
-            
+
+    def _empty_parsed_trade(self) -> dict:
         return {
-            "instrument": instrument,
-            "direction": direction,
-            "entry_price": 0.0,
-            "exit_price": 0.0,
-            "result": "PENDING",
-            "notes": text,
-            "confidence": 0.7
+            "instrument": None,
+            "timeframe": None,
+            "direction": None,
+            "entry": None,
+            "sl": None,
+            "tp": None,
+            "result": None,
+            "pnl_amount": None,
+            "entry_price": None,
+            "exit_price": None,
+            "stop_loss": None,
+            "take_profit": None,
         }
+
+    def _normalize_trade_payload(self, payload: dict) -> dict:
+        normalized = dict(payload)
+        entry = normalized.get("entry")
+        sl = normalized.get("sl")
+        tp = normalized.get("tp")
+
+        # Keep everything exactly as is for the raw output fields, but also add the mapped DB fields
+        if "instrument" not in normalized or normalized.get("instrument") in (None, ""):
+            normalized["instrument"] = "UNKNOWN"
+        normalized["entry_price"] = normalized.get("entry_price", entry)
+        normalized["exit_price"] = normalized.get("exit_price", tp)
+        normalized["stop_loss"] = normalized.get("stop_loss", sl)
+        normalized["take_profit"] = normalized.get("take_profit", tp)
+        normalized["timeframe"] = normalized.get("timeframe")
+        normalized["pnl_amount"] = normalized.get("pnl_amount")
+        return normalized

@@ -18,12 +18,12 @@ class TradeService:
     def get_trades_by_user(self, user_id: UUID, skip: int = 0, limit: int = 100):
         return self.db.query(Trade).filter(Trade.user_id == user_id).offset(skip).limit(limit).all()
 
-    def create_trade(self, user_id: UUID, trade_in: TradeCreate):
+    def create_trade(self, user_id: UUID, trade_in: TradeCreate, enforce_plan_limit: bool = True):
         user = self.db.query(User).filter(User.id == user_id).first()
         if not user:
             raise PlanLimitExceeded("User not found.")
 
-        if (user.plan or "free").strip().lower() == "free":
+        if enforce_plan_limit and (user.plan or "free").strip().lower() == "free":
             now = datetime.now(timezone.utc)
             month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
             if month_start.month == 12:

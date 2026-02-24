@@ -10,12 +10,14 @@ class Trade(Base):
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
     user_id = Column(Uuid, ForeignKey("users.id"), nullable=False)
     instrument = Column(String, nullable=False)
+    timeframe = Column(String)
     direction = Column(String)  # LONG, SHORT
     entry_price = Column(Numeric(12, 4))
     exit_price = Column(Numeric(12, 4))
     stop_loss = Column(Numeric(12, 4))
     take_profit = Column(Numeric(12, 4))
     result = Column(String)  # WIN, LOSS, BREAK_EVEN
+    pnl_amount = Column(Numeric(12, 4))
     r_multiple = Column(Numeric(8, 4))
     emotion = Column(String)
     trade_timestamp = Column(DateTime(timezone=True))
