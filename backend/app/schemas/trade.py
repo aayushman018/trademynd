@@ -19,6 +19,7 @@ class TradeMistake(TradeMistakeBase):
         from_attributes = True
 
 class TradeBase(BaseModel):
+    trade_ref: Optional[str] = None
     instrument: str
     timeframe: Optional[str] = None
     direction: Optional[str] = None
@@ -30,6 +31,9 @@ class TradeBase(BaseModel):
     pnl_amount: Optional[Decimal] = None
     r_multiple: Optional[Decimal] = None
     emotion: Optional[str] = None
+    emotion_score: Optional[Decimal] = None
+    notes: Optional[str] = None
+    narrative_data: Optional[Dict[str, Any]] = None 
     trade_timestamp: Optional[datetime] = None
     input_type: Optional[str] = None
     raw_input_data: Optional[Dict[str, Any]] = None

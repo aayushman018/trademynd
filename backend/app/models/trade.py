@@ -9,6 +9,7 @@ class Trade(Base):
 
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
     user_id = Column(Uuid, ForeignKey("users.id"), nullable=False)
+    trade_ref = Column(String)  # T1, T2 etc.
     instrument = Column(String, nullable=False)
     timeframe = Column(String)
     direction = Column(String)  # LONG, SHORT
@@ -20,6 +21,9 @@ class Trade(Base):
     pnl_amount = Column(Numeric(12, 4))
     r_multiple = Column(Numeric(8, 4))
     emotion = Column(String)
+    emotion_score = Column(Numeric(4, 2)) # e.g. 1 to 10
+    notes = Column(String)
+    narrative_data = Column(JSON) # e.g. mistakes, tags, lessons, narrative_summary
     trade_timestamp = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     input_type = Column(String)  # screenshot, voice, text

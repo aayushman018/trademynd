@@ -11,19 +11,38 @@ from app.core.config import settings
 
 GOOGLE_API_KEY = settings.GOOGLE_API_KEY or os.getenv("GOOGLE_API_KEY")
 
-IMAGE_SYSTEM_PROMPT = """You are an expert trading journal parser. You will receive a TradingView chart screenshot and a caption from the user. Return ONLY a valid JSON object, nothing else.
+IMAGE_SYSTEM_PROMPT = """You are a trading journal parser that analyzes TradingView chart screenshots. Return ONLY a valid JSON object, nothing else. No explanation, no markdown, just raw JSON.
+Extract the following fields:
 
-Rules for extracted JSON fields:
-- `instrument`: Look strictly at the top-left corner of the chart for the asset name. Convert the full name to a standard ticker symbol (e.g., "Euro / Japanese Yen" -> "EURJPY", "Gold" -> "XAUUSD"). Ignore any indicator names (like "Imbalance Finder" or "HIT"). Do NOT use the caption.
-- `timeframe`: Read the chart timeframe from the top-left corner next to the instrument name (e.g., 1m, 5m, 15m, 1h, 4h, 1D).
-- `direction`: Determine from the TradingView position tool. "LONG" if the green reward box is ABOVE the red risk box. "SHORT" if the red risk box is ABOVE the green reward box.
-- `entry`: Read the entry price strictly from the gray/grey/white text label on the right price axis where the split between the red/green boxes occurs. If not visible, return null. Do NOT guess.
-- `sl`: Read the stop loss price (the red text label on the right price axis).
-- `tp`: Read the take profit price (the green text label on the right price axis).
-- `result`: Strictly "WIN" or "LOSS" based on the context of the user's caption text.
-- `pnl_amount`: The exact numeric profit or loss amount extracted from the caption text (e.g., "loss of 50" -> 50, "made 200" -> 200). Return just the number, or null if none."""
+instrument: Read from top-left corner of chart. Convert full name to ticker (Ethereum/U.S. Dollar -> ETHUSD, Euro/Japanese Yen -> EURJPY, Gold Futures -> XAUUSD). Never take this from caption.
+timeframe: Read from top-left of chart (1m, 5m, 15m, 1h, 4h, 1D etc.)
+direction: Look at the colored risk/reward box drawn on the chart. If the GREEN box is ABOVE the entry and RED box is BELOW the entry = LONG. If the RED box is ABOVE the entry and GREEN box is BELOW the entry = SHORT.
+entry: The price level where the green and red boxes meet. Also visible as a label on the right-side price axis.
+tp: The top of the green box. Also visible as a label on the right-side price axis.
+sl: The bottom of the red box. Also visible as a label on the right-side price axis.
+result: Extract from caption text only. "loss", "hit sl", "stopped out" = LOSS. "win", "made", "took profit", "tp hit" = WIN.
+pnl_amount: The number from caption text only. e.g. "loss of 50" -> 50, "made 200" -> 200.
+emotion: null (will be collected separately)
 
-TEXT_EXTRACTION_PROMPT = """Extract trading journal entry from this text. Return ONLY JSON with fields: instrument, direction, entry, sl, tp, result, pnl_amount. Infer as much as possible."""
+If a field is not visible, return null for that field. Never return an error or explanation."""
+
+TEXT_EXTRACTION_PROMPT = """Extract a trading journal entry from this text. Return ONLY JSON with fields: instrument, direction, entry, sl, tp, result, pnl_amount, emotion. Infer as much as possible from context."""
+
+NARRATIVE_EXTRACTION_PROMPT = """You are a trading psychologist and journal assistant. The user is telling you the story of their trade. Extract the following from their narrative and return ONLY valid JSON:
+
+instrument: what they traded
+direction: long or short
+entry: entry price if mentioned
+sl: stop loss if mentioned
+tp: take profit if mentioned
+result: WIN or LOSS
+pnl_amount: profit or loss amount if mentioned
+emotion_score: rate the emotional state from 1-10 (1 = fully emotional/revenge, 10 = fully disciplined/calm)
+emotions: array of emotions detected (e.g. ["anxious", "FOMO", "revenge trading", "confident", "disciplined"])
+narrative_summary: write a 2-3 sentence summary of what happened in the trade in third person
+mistakes: array of any trading mistakes detected from the story
+lessons: array of lessons the trader mentioned or that can be inferred
+tags: array of relevant tags"""
 
 TRANSCRIBE_PROMPT = "Transcribe this trading voice/audio message. Return only the transcription text."
 
@@ -57,6 +76,16 @@ class AIService:
             parts=[{"text": f"{TEXT_EXTRACTION_PROMPT}\n\nText:\n{text}"}],
         )
         print(f"Gemini raw response (text): {raw_response}")
+        return self._parse_json_response(raw_response)
+
+    async def analyze_narrative_text(self, text: str) -> dict:
+        if not self.api_key:
+            return self._empty_parsed_trade()
+
+        raw_response = await self._generate_content(
+            parts=[{"text": f"{NARRATIVE_EXTRACTION_PROMPT}\n\nNarrative:\n{text}"}],
+        )
+        print(f"Gemini raw response (narrative): {raw_response}")
         return self._parse_json_response(raw_response)
 
     async def transcribe_audio(self, audio_data: Any, mime_type: str = "audio/ogg") -> str:

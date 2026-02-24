@@ -15,6 +15,8 @@ class User(Base):
     plan = Column(String, default="free")
     telegram_chat_id = Column(BigInteger, unique=True, index=True, nullable=True)
     telegram_connected = Column(Boolean, nullable=False, default=False, server_default=false())
+    awaiting_response_trade_id = Column(Uuid, ForeignKey("trades.id"), nullable=True)
+    awaiting_response_type = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
 
