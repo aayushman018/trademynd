@@ -31,7 +31,7 @@ TRANSCRIBE_PROMPT = "Transcribe this trading voice/audio message. Return only th
 class AIService:
     def __init__(self):
         self.api_key = GOOGLE_API_KEY
-        self.model_name = "gemini-2.0-flash"
+        self.model_name = "gemini-2.5-flash"
 
     async def analyze_screenshot(self, image_data: Any, caption: str | None = None, mime_type: str = "image/jpeg") -> dict:
         image_bytes = self._coerce_bytes(image_data)
