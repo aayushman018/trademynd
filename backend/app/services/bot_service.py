@@ -179,14 +179,19 @@ class BotService:
                 self.db.commit()
                 return self.send_message(chat_id, "Noted your context updates! Edit any specific field manually using `edit T1 field value`.")
         
+        parsed_fields = {}
+        if self.ai_service and resp_type not in ["missing_emotion"] and not resp_type.startswith("anomaly_"):
+            # Route text through AI to extract numbers gracefully (e.g. "50 dollars" -> {"pnl_amount": 50})
+            parsed_fields = await self.ai_service.analyze_text(text)
+        
         if resp_type == "missing_entry":
-            trade.entry_price = self._to_decimal(text)
+            trade.entry_price = self._to_decimal(parsed_fields.get("entry_price") or parsed_fields.get("entry") or text)
         elif resp_type == "missing_direction":
-            trade.direction = self._normalize_direction(text)
+            trade.direction = self._normalize_direction(parsed_fields.get("direction") or text)
         elif resp_type == "missing_result":
-            trade.result = self._normalize_result(text)
+            trade.result = self._normalize_result(parsed_fields.get("result") or text)
         elif resp_type == "missing_pnl":
-            trade.pnl_amount = self._to_decimal(text)
+            trade.pnl_amount = self._to_decimal(parsed_fields.get("pnl_amount") or text)
         elif resp_type == "missing_emotion":
             trade.emotion = text
         elif resp_type and resp_type.startswith("anomaly_"):
