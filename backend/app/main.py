@@ -28,6 +28,12 @@ try:
     if "users" in inspector.get_table_names():
         existing_columns = {column["name"] for column in inspector.get_columns("users")}
         with engine.begin() as connection:
+            connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS telegram_updates (
+                update_id BIGINT PRIMARY KEY,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            )
+            """))
             if "telegram_chat_id" not in existing_columns:
                 connection.execute(text("ALTER TABLE users ADD COLUMN telegram_chat_id BIGINT"))
             if "telegram_connected" not in existing_columns:

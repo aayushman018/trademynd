@@ -31,14 +31,24 @@ async def telegram_webhook(
 
     data = await request.json()
     
-    # Process in background to avoid timeout
-    # However, for simplicity in this MVP, we might process synchronously 
-    # if it's fast (like /start), but trade processing should be async.
-    
-    # We need to handle the DB session carefully with background tasks.
-    # Ideally, the service creates its own session or we pass the data to a worker.
-    # For now, let's instantiate service here and run logic.
-    
+    update_id = data.get("update_id")
+    if update_id:
+        try:
+            from sqlalchemy import text
+            with db.get_bind().begin() as connection:
+                # Atomically ensure we only process this update once to prevent Telegram retry loops
+                res = connection.execute(
+                    text("INSERT INTO telegram_updates (update_id) VALUES (:uid) ON CONFLICT DO NOTHING RETURNING update_id"),
+                    {"uid": update_id}
+                ).fetchone()
+                
+                if not res:
+                    logger.info(f"Skipping duplicate update_id: {update_id}")
+                    return {"status": "ok", "detail": "Already processed"}
+        except Exception as e:
+            logger.error(f"Error checking update_id: {e}")
+            # If table doesn't exist yet, we just continue normally
+
     bot_service = BotService(db)
     response = await bot_service.process_update(data)
     

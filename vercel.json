@@ -16,10 +16,6 @@
       "dest": "backend/vercel_entry.py"
     },
     {
-      "src": "/api/(.*)",
-      "dest": "backend/vercel_entry.py"
-    },
-    {
       "src": "/(.*)",
       "dest": "frontend/$1"
     }
