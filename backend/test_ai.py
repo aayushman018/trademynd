@@ -1,6 +1,6 @@
 import asyncio
 import os
-os.environ["GOOGLE_API_KEY"] = "AIzaSyCLRJqoFXMXr1XiWE7QYopQh8u8Fwcwse4"
+os.environ["GOOGLE_API_KEY"] = "YOUR_API_KEY_HERE"
 
 from app.services.ai_service import AIService
 
