@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.user import User
+from app.models.trade import Trade
 from app.schemas.trade import TradeCreate
 from app.services.forex_factory import (
     format_high_impact_news_message,
