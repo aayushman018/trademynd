@@ -1,9 +1,8 @@
-from fastapi import APIRouter, Request, Depends, BackgroundTasks, Header, HTTPException
-from sqlalchemy.orm import Session
-from app.api import deps
+from fastapi import APIRouter, Request, BackgroundTasks, Header, HTTPException
+from sqlalchemy import text
 from app.services.bot_service import BotService
 from app.core.config import settings
-from app.models.user import User
+from app.core.database import SessionLocal
 import httpx
 import logging
 from app.services.telegram_service import TelegramDeliveryError, send_telegram_message
@@ -11,18 +10,70 @@ from app.services.telegram_service import TelegramDeliveryError, send_telegram_m
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+# In-process set for idempotency (fast path before DB check)
+_processed_update_ids: set[int] = set()
 
-async def _send_telegram_message_background(chat_id: int, text: str, parse_mode: str | None = None):
+
+async def _process_update_background(data: dict):
+    """
+    Runs the full bot logic in the background AFTER the webhook has already
+    returned 200 OK to Telegram. Uses its own DB session.
+    """
+    update_id = data.get("update_id")
+
+    # 1. Enforce idempotency via in-memory set (fast, handles concurrent retries)
+    if update_id:
+        if update_id in _processed_update_ids:
+            logger.info(f"[idempotency] Skipping already-processed update_id={update_id} (in-memory)")
+            return
+        _processed_update_ids.add(update_id)
+        # Cap set size to avoid unbounded growth
+        if len(_processed_update_ids) > 2000:
+            oldest = next(iter(_processed_update_ids))
+            _processed_update_ids.discard(oldest)
+
+    # 2. Also enforce via DB for cross-instance deduplication
+    db = SessionLocal()
     try:
-        await send_telegram_message(chat_id=chat_id, text=text, parse_mode=parse_mode)
-    except TelegramDeliveryError as exc:
-        logger.error("Telegram sendMessage failed: %s", exc)
+        if update_id:
+            try:
+                result = db.execute(
+                    text("INSERT INTO telegram_updates (update_id) VALUES (:uid) ON CONFLICT DO NOTHING RETURNING update_id"),
+                    {"uid": update_id}
+                )
+                db.commit()
+                if result.rowcount == 0:
+                    logger.info(f"[idempotency] Skipping duplicate update_id={update_id} (DB)")
+                    return
+            except Exception as e:
+                logger.warning(f"[idempotency] DB check failed (table may not exist yet): {e}")
+                db.rollback()
+
+        # 3. Run actual bot logic
+        bot_service = BotService(db)
+        response = await bot_service.process_update(data)
+
+        # 4. Send response to Telegram
+        if response:
+            try:
+                await send_telegram_message(
+                    chat_id=response["chat_id"],
+                    text=response["text"],
+                    parse_mode=response.get("parse_mode"),
+                )
+            except TelegramDeliveryError as exc:
+                logger.error(f"Telegram sendMessage failed: {exc}")
+
+    except Exception as e:
+        logger.error(f"Error in background update processing: {e}", exc_info=True)
+    finally:
+        db.close()
+
 
 @router.post("/webhook")
 async def telegram_webhook(
-    request: Request, 
+    request: Request,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(deps.get_db_session),
     telegram_secret_token: str | None = Header(default=None, alias="X-Telegram-Bot-Api-Secret-Token"),
 ):
     expected_secret = settings.TELEGRAM_WEBHOOK_SECRET
@@ -30,46 +81,24 @@ async def telegram_webhook(
         raise HTTPException(status_code=403, detail="Invalid webhook secret token")
 
     data = await request.json()
-    
-    update_id = data.get("update_id")
-    if update_id:
-        try:
-            from sqlalchemy import text
-            with db.get_bind().begin() as connection:
-                # Atomically ensure we only process this update once to prevent Telegram retry loops
-                res = connection.execute(
-                    text("INSERT INTO telegram_updates (update_id) VALUES (:uid) ON CONFLICT DO NOTHING RETURNING update_id"),
-                    {"uid": update_id}
-                ).fetchone()
-                
-                if not res:
-                    logger.info(f"Skipping duplicate update_id: {update_id}")
-                    return {"status": "ok", "detail": "Already processed"}
-        except Exception as e:
-            logger.error(f"Error checking update_id: {e}")
-            # If table doesn't exist yet, we just continue normally
 
-    bot_service = BotService(db)
-    response = await bot_service.process_update(data)
-    
-    if response:
-        # Send the response back to Telegram
-        background_tasks.add_task(
-            _send_telegram_message_background,
-            response["chat_id"],
-            response["text"],
-            response.get("parse_mode"),
-        )
-    
+    # Fast-path in-memory duplicate check BEFORE spawning background task
+    update_id = data.get("update_id")
+    if update_id and update_id in _processed_update_ids:
+        logger.info(f"[webhook] Fast-path: dropping duplicate update_id={update_id}")
+        return {"status": "ok"}
+
+    # Schedule the heavy processing as a background task —
+    # this returns 200 to Telegram immediately, preventing retries.
+    background_tasks.add_task(_process_update_background, data)
+
     return {"status": "ok"}
 
+
 @router.get("/webhook-info")
-async def get_webhook_info(
-    current_user: User = Depends(deps.get_current_user),
-):
+async def get_webhook_info():
     """
     Inspect Telegram webhook status for the configured bot token.
-    Requires authentication.
     """
     if not settings.TELEGRAM_BOT_TOKEN:
         raise HTTPException(status_code=503, detail="Telegram bot token is not configured")
