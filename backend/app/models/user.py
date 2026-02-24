@@ -21,7 +21,7 @@ class User(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
 
     telegram_connection = relationship("TelegramConnection", back_populates="user", uselist=False, cascade="all, delete-orphan")
-    trades = relationship("Trade", back_populates="user", cascade="all, delete-orphan")
+    trades = relationship("Trade", back_populates="user", cascade="all, delete-orphan", foreign_keys="[Trade.user_id]")
     subscription = relationship("Subscription", back_populates="user", uselist=False, cascade="all, delete-orphan")
 
 class TelegramConnection(Base):

@@ -29,7 +29,7 @@ class Trade(Base):
     input_type = Column(String)  # screenshot, voice, text
     raw_input_data = Column(JSON)
 
-    user = relationship("User", back_populates="trades")
+    user = relationship("User", back_populates="trades", foreign_keys="[Trade.user_id]")
     mistakes = relationship("TradeMistake", back_populates="trade", cascade="all, delete-orphan")
 
 class TradeMistake(Base):
