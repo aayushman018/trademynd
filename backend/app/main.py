@@ -34,9 +34,25 @@ try:
                 connection.execute(
                     text("ALTER TABLE users ADD COLUMN telegram_connected BOOLEAN NOT NULL DEFAULT FALSE")
                 )
+            if "awaiting_response_trade_id" not in existing_columns:
+                connection.execute(text("ALTER TABLE users ADD COLUMN awaiting_response_trade_id UUID REFERENCES trades(id)"))
+            if "awaiting_response_type" not in existing_columns:
+                connection.execute(text("ALTER TABLE users ADD COLUMN awaiting_response_type VARCHAR"))
             connection.execute(
                 text("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_telegram_chat_id ON users (telegram_chat_id)")
             )
+
+    if "trades" in inspector.get_table_names():
+        trade_columns = {column["name"] for column in inspector.get_columns("trades")}
+        with engine.begin() as connection:
+            if "trade_ref" not in trade_columns:
+                connection.execute(text("ALTER TABLE trades ADD COLUMN trade_ref VARCHAR"))
+            if "notes" not in trade_columns:
+                connection.execute(text("ALTER TABLE trades ADD COLUMN notes VARCHAR"))
+            if "emotion_score" not in trade_columns:
+                connection.execute(text("ALTER TABLE trades ADD COLUMN emotion_score NUMERIC(4, 2)"))
+            if "narrative_data" not in trade_columns:
+                connection.execute(text("ALTER TABLE trades ADD COLUMN narrative_data JSON"))
 
     logger.info("Database tables created successfully")
 except Exception as e:
